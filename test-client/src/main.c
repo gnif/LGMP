@@ -39,14 +39,14 @@ int main(int argc, char * argv[])
   int fd = open(SHARED_FILE, O_RDWR, (mode_t)0600);
   if (fd < 0)
   {
-    printf("Failed to open %s", SHARED_FILE);
+    perror("open failed");
     return -1;
   }
 
   ram = mmap(0, RAM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (!ram)
   {
-    printf("Failed to mmap\n");
+    perror("mmap failed");
     goto out_close;
   }
 

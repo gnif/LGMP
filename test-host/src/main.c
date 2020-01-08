@@ -32,40 +32,47 @@ void * ram;
 
 int main(int argc, char * argv[])
 {
-  int fd = open(SHARED_FILE, O_RDWR, (mode_t)0600);
+  int fd = open(SHARED_FILE, O_RDWR | O_CREAT, (mode_t)0600);
   if (fd < 0)
   {
-    printf("Failed to open %s", SHARED_FILE);
+    perror("open failed");
     return -1;
+  }
+
+  if (ftruncate(fd, RAM_SIZE) != 0)
+  {
+    perror("ftruncate failed");
+    goto out_close;
   }
 
   ram = mmap(0, RAM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (!ram)
   {
-    printf("Failed to mmap\n");
+    perror("mmap failed");
     goto out_close;
   }
 
   PLGMPHost host;
-  if (lgmpHostInit(ram, RAM_SIZE, &host) != LGMP_OK)
+  LGMP_STATUS status;
+  if ((status = lgmpHostInit(ram, RAM_SIZE, &host)) != LGMP_OK)
   {
-    printf("lgmpHostInit failed\n");
+    printf("lgmpHostInit failed: %s\n", lgmpStatusString(status));
     goto out_unmap;
   }
 
   PLGMPQueue queue;
-  if (lgmpHostAddQueue(host, 0, 10, &queue) != LGMP_OK)
+  if ((status = lgmpHostAddQueue(host, 0, 10, &queue)) != LGMP_OK)
   {
-    printf("lgmpHostAddQueue failed\n");
+    printf("lgmpHostAddQueue failed: %s\n", lgmpStatusString(status));
     goto out_lgmphost;
   }
 
   PLGMPMemory mem[10] = { 0 };
   for(int i = 0; i < 10; ++i)
   {
-    if (lgmpHostMemAlloc(host, 1024, &mem[i]) != LGMP_OK)
+    if ((status = lgmpHostMemAlloc(host, 1024, &mem[i])) != LGMP_OK)
     {
-      printf("lgmpHostAlloc failed\n");
+      printf("lgmpHostAlloc failed: %s\n", lgmpStatusString(status));
       goto out_lgmphost;
     }
   }
@@ -85,11 +92,14 @@ int main(int argc, char * argv[])
 
   while(true)
   {
-    while(lgmpHostPost(queue, count, mem[count % 10]) != LGMP_ERR_QUEUE_FULL)
+    while((status = lgmpHostPost(queue, count, mem[count % 10])) != LGMP_ERR_QUEUE_FULL)
       ++count;
 
     if (lgmpHostProcess(host) != LGMP_OK)
+    {
+      printf("lgmpHostPost Failed: %s\n", lgmpStatusString(status));
       break;
+    }
 
 //    usleep(1);
   }
