@@ -27,6 +27,12 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #define LGMP_PROTOCOL_VERSION 1
 #define LGMP_MAX_QUEUES       5
 
+#define LGMP_SUBS_ON(x)          (uint32_t)((x) >> 32)
+#define LGMP_SUBS_BAD(x)         (uint32_t)((x) >>  0)
+#define LGMP_SUBS_OR_BAD(x, bad) ((x) | (bad))
+#define LGMP_SUBS_CLEAR(x, cl)   ((x) & ~((cl) | ((uint64_t)(cl) << 32)))
+#define LGMP_SUBS_SET(x, st)     ((x) | ((uint64_t)(st) << 32))
+
 struct LGMPHeaderMessage
 {
   uint32_t udata;
@@ -41,8 +47,7 @@ struct LGMPHeaderQueue
   uint32_t numMessages;
 
   uint32_t lock;
-  uint32_t subs;
-  uint32_t badSubs;
+  uint64_t subs; // see LGMP_SUBS_* macros
 
   uint32_t position;
   uint32_t messagesOffset;

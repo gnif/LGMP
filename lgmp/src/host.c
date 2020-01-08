@@ -130,7 +130,6 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessa
   hq->numMessages    = numMessages;
   atomic_flag_clear(&hq->lock);
   hq->subs           = 0;
-  hq->badSubs        = 0;
   hq->position       = 0;
   hq->messagesOffset = host->nextFree;
 
@@ -143,81 +142,71 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessa
 LGMP_STATUS lgmpHostProcess(PLGMPHost host)
 {
   assert(host);
-
   ++host->header->heartbeat;
   const uint64_t now = lgmpGetClockMS();
 
   // each queue
   for(unsigned int i = 0; i < host->header->numQueues; ++i)
   {
-    struct LGMPHQueue         *queue    = &host->queues[i];
+    struct LGMPHQueue *queue = &host->queues[i];
+
+    // check the first message
+    if(!queue->count)
+      continue;
+
     struct LGMPHeaderQueue   *hq       = &host->header->queues[i];
     struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
       (host->mem + hq->messagesOffset);
+    struct LGMPHeaderMessage *msg = &messages[queue->start];
 
-    // check the first message
-    if(queue->count)
+    while(atomic_flag_test_and_set(&hq->lock)) {};
+    uint64_t subs = atomic_load(&hq->subs);
+    uint32_t pend = atomic_load(&msg->pendingSubs);
+    if ((pend & ~LGMP_SUBS_BAD(subs)) && now > queue->msgTimeout)
     {
-      struct LGMPHeaderMessage *msg = &messages[queue->start];
-      if ((atomic_load(&msg->pendingSubs) & ~atomic_load(&hq->badSubs)) &&
-          now > queue->msgTimeout)
+      // get the new bad subscribers
+      const uint32_t newBadSubs = pend & ~LGMP_SUBS_BAD(subs);
+
+      // reset garbage collection timeout for new bad subs
+      if (newBadSubs)
       {
-        // take the queue lock
-        while(atomic_flag_test_and_set(&hq->lock)) {};
-
-        // get the new bad subscribers
-        const uint32_t newBadSubs = hq->subs & msg->pendingSubs;
-        atomic_fetch_or(&hq->badSubs, newBadSubs);
-
-        // reset garbage collection timeout for new bad subs
-        if (newBadSubs)
-        {
-          const uint64_t timeout = now + LGMP_MAX_QUEUE_TIMEOUT;
-          for(unsigned int id = 0; id < 32; ++id)
-            if (newBadSubs & (1 << id))
-              queue->timeout[id] = timeout;
-        }
-
-        // clear the pending subs and release the queue lock
-        atomic_fetch_and(&msg->pendingSubs, 0);
-        atomic_flag_clear(&hq->lock);
+        subs = LGMP_SUBS_OR_BAD(subs, newBadSubs);
+        const uint64_t timeout = now + LGMP_MAX_QUEUE_TIMEOUT;
+        for(unsigned int id = 0; id < 32; ++id)
+          if (newBadSubs & (1 << id))
+            queue->timeout[id] = timeout;
       }
 
-      if (!(msg->pendingSubs & ~hq->badSubs))
-      {
-        // message finished
-        if (++queue->start == hq->numMessages)
-          queue->start = 0;
+      // clear the pending subs
+      atomic_store(&msg->pendingSubs, 0);
+      pend = 0;
+    }
 
-        // decrement the queue and check if we need to update the timeout
-        if (queue->count--)
-          queue->msgTimeout = now + LGMP_MAX_MESSAGE_AGE;
-      }
+    if (!(pend & ~LGMP_SUBS_BAD(subs)))
+    {
+      // message finished
+      if (++queue->start == hq->numMessages)
+        queue->start = 0;
+
+      // decrement the queue and check if we need to update the timeout
+      if (queue->count--)
+        queue->msgTimeout = now + LGMP_MAX_MESSAGE_AGE;
     }
 
     // recover subs for reuse that have been flagged as bad and have exceeded the queue timeout
-    if (hq->badSubs)
+    if (LGMP_SUBS_ON(subs))
     {
       uint32_t reap = 0;
       for(unsigned int id = 0; id < 32; ++id)
       {
-        if ((hq->badSubs & (1 << id)) && now > queue->timeout[id])
+        if ((LGMP_SUBS_BAD(subs) & (1 << id)) && now > queue->timeout[id])
           reap |= (1 << id);
       }
-
-      if (reap)
-      {
-        // take the queue lock
-        while(atomic_flag_test_and_set(&hq->lock)) {};
-
-        // clear the reaped subs
-        atomic_fetch_and(&hq->badSubs, ~reap);
-        atomic_fetch_and(&hq->subs   , ~reap);
-
-        // relese the lock
-        atomic_flag_clear(&hq->lock);
-      }
+      subs = LGMP_SUBS_CLEAR(subs, reap);
     }
+
+    atomic_store(&hq->subs, subs);
+    atomic_flag_clear(&hq->lock);
   }
 
   return LGMP_OK;
@@ -281,9 +270,8 @@ LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t udata, PLGMPMemory payload)
   msg->offset = payload->offset;
 
   // copy the subs into the message
-  while(atomic_flag_test_and_set(&hq->lock)) {};
-  msg->pendingSubs = atomic_load(&hq->subs) & ~atomic_load(&hq->badSubs);
-  atomic_flag_clear(&hq->lock);
+  uint64_t subs = atomic_load(&hq->subs);
+  msg->pendingSubs = LGMP_SUBS_ON(subs) & ~(LGMP_SUBS_BAD(subs));
 
   // increment the queue count, if it were zero update the msgTimeout
   if (queue->count++ == 0)
