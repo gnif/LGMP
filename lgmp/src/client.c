@@ -137,8 +137,7 @@ LGMP_STATUS lgmpClientSubscribe(LGMPClient client, uint32_t type, LGMPQueue * re
   LGMPQueue q = *result;
 
   // take the queue lock
-  while(!__sync_bool_compare_and_swap(&hq->lock, 0, 1))
-    usleep(1);
+  while(__sync_lock_test_and_set(&hq->lock, 1)) while(hq->lock);
 
   // find the next free queue ID
   unsigned int id = 0;
@@ -148,13 +147,13 @@ LGMP_STATUS lgmpClientSubscribe(LGMPClient client, uint32_t type, LGMPQueue * re
   // check if full
   if (id == 32)
   {
-    __sync_fetch_and_sub(&hq->lock, 1);
+    __sync_lock_release(&hq->lock);
     return LGMP_ERR_QUEUE_FULL; //TODO: better return error
   }
 
   // set the queue bit and release the lock
   __sync_or_and_fetch(&hq->subs, (1 << id));
-  __sync_fetch_and_sub(&hq->lock, 1);
+  __sync_lock_release(&hq->lock);
 
   q->host     = NULL;
   q->client   = client;
@@ -178,12 +177,11 @@ LGMP_STATUS lgmpClientUnsubscribe(LGMPQueue * result)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
   // take the queue lock
-  while(!__sync_bool_compare_and_swap(&hq->lock, 0, 1))
-    usleep(1);
+  while(__sync_lock_test_and_set(&hq->lock, 1)) while(hq->lock);
 
   // unset the queue id bit and release the lock
   __sync_and_and_fetch(&hq->subs, ~bit);
-  __sync_fetch_and_sub(&hq->lock, 1);
+  __sync_lock_release(&hq->lock);
 
   memset(queue, 0, sizeof(struct LGMPQueue));
   *result = NULL;
