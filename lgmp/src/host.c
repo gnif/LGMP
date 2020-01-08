@@ -50,6 +50,11 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result)
   assert(result);
 
   *result = NULL;
+
+  // make sure that lgmpGetClockMS works
+  if (!lgmpGetClockMS())
+    return LGMP_ERR_CLOCK_FAILURE;
+
   if (size < sizeof(struct LGMPHeader))
     return LGMP_ERR_INVALID_SIZE;
 
@@ -115,7 +120,7 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t type, uint32_t numMessages
   queue->index      = host->header->numQueues;
   queue->position   = 0;
   queue->start      = 0;
-  queue->msgTimeout = lgmpGetClock() + LGMP_MAX_MESSAGE_AGE;
+  queue->msgTimeout = lgmpGetClockMS() + LGMP_MAX_MESSAGE_AGE;
 
   struct LGMPHeaderQueue * hq = &host->header->queues[host->header->numQueues++];
   hq->type           = type;
@@ -138,7 +143,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
   assert(host);
 
   ++host->header->heartbeat;
-  const uint64_t now = lgmpGetClock();
+  const uint64_t now = lgmpGetClockMS();
 
   // each queue
   for(unsigned int i = 0; i < host->header->numQueues; ++i)
@@ -280,7 +285,7 @@ LGMP_STATUS lgmpHostPost(PLGMPQueue queue, uint32_t type, PLGMPMemory payload)
 
   // increment the queue count, if it were zero update the msgTimeout
   if (!atomic_fetch_add(&hq->count, 1))
-    queue->msgTimeout = lgmpGetClock() + LGMP_MAX_MESSAGE_AGE;
+    queue->msgTimeout = lgmpGetClockMS() + LGMP_MAX_MESSAGE_AGE;
 
   if (++queue->position == hq->numMessages)
     queue->position = 0;

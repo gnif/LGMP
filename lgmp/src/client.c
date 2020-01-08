@@ -52,6 +52,10 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
   if (size < sizeof(struct LGMPHeader))
     return LGMP_ERR_INVALID_SIZE;
 
+  // make sure that lgmpGetClockMS works
+  if (!lgmpGetClockMS())
+    return LGMP_ERR_CLOCK_FAILURE;
+
   struct LGMPHeader *header = (struct LGMPHeader*)mem;
   if (header->magic != LGMP_PROTOCOL_MAGIC)
     return LGMP_ERR_INVALID_MAGIC;
@@ -74,7 +78,7 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
   client->header        = header;
   client->sessionID     = header->sessionID;
   client->heartbeat     = header->heartbeat;
-  client->lastHeartbeat = lgmpGetClock();
+  client->lastHeartbeat = lgmpGetClockMS();
 
   memset(&client->queues, 0, sizeof(client->queues));
   return LGMP_OK;
@@ -98,7 +102,7 @@ bool lgmpClientSessionValid(PLGMPClient client)
   if (client->sessionID != client->header->sessionID)
     return false;
 
-  const uint64_t now = lgmpGetClock();
+  const uint64_t now = lgmpGetClockMS();
 
   // check if the heartbeat changed
   if (client->heartbeat != client->header->heartbeat)

@@ -45,11 +45,12 @@ struct LGMPMemory
   void        *mem;
 };
 
-inline static uint64_t lgmpGetClock()
+inline static uint64_t lgmpGetClockMS()
 {
   struct timespec tsnow;
-  clock_gettime(CLOCK_MONOTONIC, &tsnow);
-  return tsnow.tv_sec * 1000 + tsnow.tv_nsec / 1000000;
+  if (clock_gettime(CLOCK_MONOTONIC, &tsnow) != 0)
+    return 0;
+  return (uint64_t)tsnow.tv_sec * 1000U + (uint64_t)tsnow.tv_nsec / 1000000U;
 }
 
 #endif

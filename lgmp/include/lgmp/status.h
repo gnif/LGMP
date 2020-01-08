@@ -27,6 +27,7 @@ extern "C" {
 typedef enum
 {
   LGMP_OK,
+  LGMP_ERR_CLOCK_FAILURE,
   LGMP_ERR_INVALID_ARGUMENT,
   LGMP_ERR_INVALID_SIZE,
   LGMP_ERR_INVALID_SESSION,
@@ -49,6 +50,7 @@ static const char * lgmpStatusString(LGMP_STATUS status)
   switch(status)
   {
     case LGMP_OK                    : return "LGMP_OK";
+    case LGMP_ERR_CLOCK_FAILURE     : return "LGMP_CLOCK_FAILURE";
     case LGMP_ERR_INVALID_ARGUMENT  : return "LGMP_ERR_INVALID_ARGUMENT";
     case LGMP_ERR_INVALID_SIZE      : return "LGMP_ERR_INVALID_SIZE";
     case LGMP_ERR_INVALID_SESSION   : return "LGMP_ERR_INVALID_SESSION";
