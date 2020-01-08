@@ -35,12 +35,12 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result);
 void        lgmpClientFree(PLGMPClient * client);
 bool        lgmpClientSessionValid(PLGMPClient client);
 
-LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t type, PLGMPCQueue * result);
+LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPCQueue * result);
 LGMP_STATUS lgmpClientUnsubscribe(PLGMPCQueue * result);
 
 typedef struct
 {
-  uint32_t   type;
+  uint32_t   udata;
   uint32_t   size;
   void     * mem;
 }

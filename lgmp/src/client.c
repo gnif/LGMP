@@ -119,7 +119,7 @@ bool lgmpClientSessionValid(PLGMPClient client)
   return true;
 }
 
-LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t type, PLGMPCQueue * result)
+LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPCQueue * result)
 {
   assert(client);
   assert(result);
@@ -129,7 +129,7 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t type, PLGMPCQueue *
   struct LGMPHeaderQueue *hq = NULL;
   uint32_t queueIndex;
   for(queueIndex = 0; queueIndex < client->header->numQueues; ++queueIndex)
-    if (client->header->queues[queueIndex].type == type)
+    if (client->header->queues[queueIndex].queueID == queueID)
     {
       hq = &client->header->queues[queueIndex];
       break;
@@ -211,7 +211,7 @@ LGMP_STATUS lgmpClientProcess(PLGMPCQueue queue, PLGMPMessage result)
     (queue->client->mem + hq->messagesOffset);
   struct LGMPHeaderMessage *msg = &messages[queue->position];
 
-  result->type  = msg->type;
+  result->udata = msg->udata;
   result->size  = msg->size;
   result->mem   = queue->client->mem + msg->offset;
 

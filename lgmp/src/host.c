@@ -96,7 +96,7 @@ void lgmpHostFree(PLGMPHost * host)
   *host = NULL;
 }
 
-LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t type, uint32_t numMessages, PLGMPHQueue * result)
+LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHQueue * result)
 {
   assert(host);
   assert(result);
@@ -122,7 +122,7 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t type, uint32_t numMessages
   queue->msgTimeout = lgmpGetClockMS() + LGMP_MAX_MESSAGE_AGE;
 
   struct LGMPHeaderQueue * hq = &host->header->queues[host->header->numQueues++];
-  hq->type           = type;
+  hq->queueID        = queueID;
   hq->numMessages    = numMessages;
   atomic_flag_clear(&hq->lock);
   hq->subs           = 0;
@@ -260,7 +260,7 @@ void * lgmpHostMemPtr(PLGMPMemory mem)
   return mem->mem;
 }
 
-LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t type, PLGMPMemory payload)
+LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t udata, PLGMPMemory payload)
 {
   struct LGMPHeaderQueue *hq = &queue->host->header->queues[queue->index];
 
@@ -273,9 +273,9 @@ LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t type, PLGMPMemory payload)
 
   struct LGMPHeaderMessage *msg = &messages[queue->position];
 
-  msg->type        = type;
-  msg->size        = payload->size;
-  msg->offset      = payload->offset;
+  msg->udata  = udata;
+  msg->size   = payload->size;
+  msg->offset = payload->offset;
 
   // copy the subs into the message
   while(atomic_flag_test_and_set(&hq->lock)) {};

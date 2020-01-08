@@ -29,7 +29,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 
 struct LGMPHeaderMessage
 {
-  uint32_t type;
+  uint32_t udata;
   uint32_t size;
   uint32_t offset;
   uint32_t pendingSubs;
@@ -37,7 +37,7 @@ struct LGMPHeaderMessage
 
 struct LGMPHeaderQueue
 {
-  uint32_t type;
+  uint32_t queueID;
   uint32_t numMessages;
 
   uint32_t lock;

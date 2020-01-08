@@ -75,7 +75,7 @@ int main(int argc, char * argv[])
     }
   }
 
-  uint32_t lastType = 0;
+  uint32_t lastCount = 0;
   while(lgmpClientSessionValid(client))
   {
     LGMPMessage msg;
@@ -93,17 +93,17 @@ int main(int argc, char * argv[])
       }
     }
 
-    printf("Got %4u: %s\n", msg.type, (char *)msg.mem);
-    if (!lastType)
-      lastType = msg.type;
+    printf("Got %4u: %s\n", msg.udata, (char *)msg.mem);
+    if (!lastCount)
+      lastCount = msg.udata;
     else
     {
-      if (lastType != msg.type - 1)
+      if (lastCount != msg.udata - 1)
       {
         printf("MISSED MESSAGE\n");
         goto out_unsub;
       }
-      lastType = msg.type;
+      lastCount = msg.udata;
     }
 
     if (delay)
