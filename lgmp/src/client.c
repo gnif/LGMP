@@ -182,7 +182,9 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPCQueue * result)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
   // unset the queue id bit
+  while(atomic_flag_test_and_set(&hq->lock)) {};
   atomic_fetch_and(&hq->subs, ~bit);
+  atomic_flag_clear(&hq->lock);
 
   memset(queue, 0, sizeof(struct LGMPCQueue));
   *result = NULL;
