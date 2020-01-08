@@ -17,7 +17,20 @@ this program; if not, write to the Free Software Foundation, Inc., 59 Temple
 Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
-typedef struct LGMPHost   * LGMPHost;
-typedef struct LGMPClient * LGMPClient;
-typedef struct LGMPQueue  * LGMPQueue;
-typedef struct LGMPMemory * LGMPMemory;
+#ifndef LGMP_LGMP_H
+#define LGMP_LGMP_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct LGMPHost   * PLGMPHost;
+typedef struct LGMPClient * PLGMPClient;
+typedef struct LGMPQueue  * PLGMPQueue;
+typedef struct LGMPMemory * PLGMPMemory;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

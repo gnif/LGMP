@@ -17,18 +17,25 @@ this program; if not, write to the Free Software Foundation, Inc., 59 Temple
 Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
+#ifndef LGMP_HOST_H
+#define LGMP_HOST_H
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include "lgmp/lgmp.h"
+#include "lgmp.h"
 #include "status.h"
 
-LGMP_STATUS lgmpHostInit(void *mem, const size_t size, LGMPHost * result);
-void lgmpHostFree(LGMPHost * host);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-LGMP_STATUS lgmpHostAddQueue(LGMPHost host, uint32_t type, uint32_t numMessages, LGMPQueue * result);
-LGMP_STATUS lgmpHostProcess(LGMPHost host);
+LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result);
+void lgmpHostFree(PLGMPHost * host);
+
+LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t type, uint32_t numMessages, PLGMPQueue * result);
+LGMP_STATUS lgmpHostProcess(PLGMPHost host);
 
 /**
  * Allocates some RAM for application use from the shared memory
@@ -37,8 +44,14 @@ LGMP_STATUS lgmpHostProcess(LGMPHost host);
  * the LGMPMemory structure, but does not recover the shared memory for later
  * use.
  */
-LGMP_STATUS lgmpHostMemAlloc(LGMPHost host, uint32_t size, LGMPMemory * result);
-void        lgmpHostMemFree (LGMPMemory * mem);
-void *      lgmpHostMemPtr  (LGMPMemory mem);
+LGMP_STATUS lgmpHostMemAlloc(PLGMPHost host, uint32_t size, PLGMPMemory * result);
+void        lgmpHostMemFree (PLGMPMemory * mem);
+void *      lgmpHostMemPtr  (PLGMPMemory mem);
 
-LGMP_STATUS lgmpHostPost(LGMPQueue queue, uint32_t type, LGMPMemory payload);
+LGMP_STATUS lgmpHostPost(PLGMPQueue queue, uint32_t type, PLGMPMemory payload);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

@@ -17,6 +17,9 @@ this program; if not, write to the Free Software Foundation, Inc., 59 Temple
 Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
+#ifndef LGMP_PRIVATE_HEADERS_H
+#define LGMP_PRIVATE_HEADERS_H
+
 #include <stdint.h>
 #include <stdatomic.h>
 
@@ -56,3 +59,5 @@ struct LGMPHeader
   uint32_t numQueues;
   struct LGMPHeaderQueue queues[LGMP_MAX_QUEUES];
 };
+
+#endif

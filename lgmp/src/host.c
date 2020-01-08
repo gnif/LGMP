@@ -43,7 +43,7 @@ struct LGMPHost
   struct LGMPQueue    queues[LGMP_MAX_QUEUES];
 };
 
-LGMP_STATUS lgmpHostInit(void *mem, const size_t size, LGMPHost * result)
+LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result)
 {
   assert(mem);
   assert(size > 0);
@@ -57,7 +57,7 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, LGMPHost * result)
   if (!*result)
     return LGMP_ERR_NO_MEM;
 
-  LGMPHost host = *result;
+  PLGMPHost host = *result;
 
   host->mem      = mem;
   host->size     = size;
@@ -81,7 +81,7 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, LGMPHost * result)
   return LGMP_OK;
 }
 
-void lgmpHostFree(LGMPHost * host)
+void lgmpHostFree(PLGMPHost * host)
 {
   assert(host);
   if (!*host)
@@ -91,7 +91,7 @@ void lgmpHostFree(LGMPHost * host)
   *host = NULL;
 }
 
-LGMP_STATUS lgmpHostAddQueue(LGMPHost host, uint32_t type, uint32_t numMessages, LGMPQueue * result)
+LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t type, uint32_t numMessages, PLGMPQueue * result)
 {
   assert(host);
   assert(result);
@@ -108,7 +108,7 @@ LGMP_STATUS lgmpHostAddQueue(LGMPHost host, uint32_t type, uint32_t numMessages,
     return LGMP_ERR_NO_SHARED_MEM;
 
   *result = &host->queues[host->header->numQueues];
-  LGMPQueue queue = *result;
+  PLGMPQueue queue = *result;
 
   queue->host       = host;
   queue->client     = NULL;
@@ -133,7 +133,7 @@ LGMP_STATUS lgmpHostAddQueue(LGMPHost host, uint32_t type, uint32_t numMessages,
   return LGMP_OK;
 }
 
-LGMP_STATUS lgmpHostProcess(LGMPHost host)
+LGMP_STATUS lgmpHostProcess(PLGMPHost host)
 {
   assert(host);
 
@@ -216,7 +216,7 @@ LGMP_STATUS lgmpHostProcess(LGMPHost host)
   return LGMP_OK;
 }
 
-LGMP_STATUS lgmpHostMemAlloc(LGMPHost host, uint32_t size, LGMPMemory *result)
+LGMP_STATUS lgmpHostMemAlloc(PLGMPHost host, uint32_t size, PLGMPMemory *result)
 {
   assert(host);
   assert(result);
@@ -228,7 +228,7 @@ LGMP_STATUS lgmpHostMemAlloc(LGMPHost host, uint32_t size, LGMPMemory *result)
   if (!*result)
     return LGMP_ERR_NO_MEM;
 
-  LGMPMemory mem = *result;
+  PLGMPMemory mem = *result;
   mem->host   = host;
   mem->offset = host->nextFree;
   mem->size   = size;
@@ -240,7 +240,7 @@ LGMP_STATUS lgmpHostMemAlloc(LGMPHost host, uint32_t size, LGMPMemory *result)
   return LGMP_OK;
 }
 
-void lgmpHostMemFree(LGMPMemory * mem)
+void lgmpHostMemFree(PLGMPMemory * mem)
 {
   assert(mem);
   if (!*mem)
@@ -250,13 +250,13 @@ void lgmpHostMemFree(LGMPMemory * mem)
   *mem = NULL;
 }
 
-void * lgmpHostMemPtr(LGMPMemory mem)
+void * lgmpHostMemPtr(PLGMPMemory mem)
 {
   assert(mem);
   return mem->mem;
 }
 
-LGMP_STATUS lgmpHostPost(LGMPQueue queue, uint32_t type, LGMPMemory payload)
+LGMP_STATUS lgmpHostPost(PLGMPQueue queue, uint32_t type, PLGMPMemory payload)
 {
   struct LGMPHeaderQueue *hq = &queue->host->header->queues[queue->index];
 

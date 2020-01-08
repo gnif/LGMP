@@ -17,13 +17,16 @@ this program; if not, write to the Free Software Foundation, Inc., 59 Temple
 Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
+#ifndef LGMP_PRIVATE_LGMP_H
+#define LGMP_PRIVATE_LGMP_H
+
 #include "lgmp/lgmp.h"
 #include <time.h>
 
 struct LGMPQueue
 {
-  LGMPHost      host;
-  LGMPClient    client;
+  PLGMPHost     host;
+  PLGMPClient   client;
   unsigned int  id;
   unsigned int  index;
   uint32_t      position;
@@ -36,7 +39,7 @@ struct LGMPQueue
 
 struct LGMPMemory
 {
-  LGMPHost     host;
+  PLGMPHost    host;
   unsigned int offset;
   uint32_t     size;
   void        *mem;
@@ -48,3 +51,5 @@ inline static uint64_t lgmpGetClock()
   clock_gettime(CLOCK_MONOTONIC, &tsnow);
   return tsnow.tv_sec * 1000 + tsnow.tv_nsec / 1000000;
 }
+
+#endif

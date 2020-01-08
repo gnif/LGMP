@@ -50,8 +50,8 @@ int main(int argc, char * argv[])
     goto out_close;
   }
 
-  LGMPClient  client;
-  LGMP_STATUS status;
+  PLGMPClient  client;
+  LGMP_STATUS  status;
   while((status = lgmpClientInit(ram, RAM_SIZE, &client)) != LGMP_OK)
   {
     if (status == LGMP_ERR_INVALID_MAGIC)
@@ -63,7 +63,7 @@ int main(int argc, char * argv[])
     }
   }
 
-  LGMPQueue queue;
+  PLGMPQueue queue;
   while((status = lgmpClientSubscribe(client, 0, &queue)) != LGMP_OK)
   {
     if (status == LGMP_ERR_NO_SUCH_QUEUE)

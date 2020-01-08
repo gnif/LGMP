@@ -17,6 +17,13 @@ this program; if not, write to the Free Software Foundation, Inc., 59 Temple
 Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
+#ifndef LGMP_STATUS_H
+#define LGMP_STATUS_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum
 {
   LGMP_OK,
@@ -59,3 +66,9 @@ static const char * lgmpStatusString(LGMP_STATUS status)
   }
   return "Invalid status!";
 }
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

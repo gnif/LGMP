@@ -46,21 +46,21 @@ int main(int argc, char * argv[])
     goto out_close;
   }
 
-  LGMPHost host;
+  PLGMPHost host;
   if (lgmpHostInit(ram, RAM_SIZE, &host) != LGMP_OK)
   {
     printf("lgmpHostInit failed\n");
     goto out_unmap;
   }
 
-  LGMPQueue queue;
+  PLGMPQueue queue;
   if (lgmpHostAddQueue(host, 0, 10, &queue) != LGMP_OK)
   {
     printf("lgmpHostAddQueue failed\n");
     goto out_lgmphost;
   }
 
-  LGMPMemory mem[10] = { 0 };
+  PLGMPMemory mem[10] = { 0 };
   for(int i = 0; i < 10; ++i)
   {
     if (lgmpHostMemAlloc(host, 1024, &mem[i]) != LGMP_OK)
