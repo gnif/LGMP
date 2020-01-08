@@ -51,6 +51,7 @@ struct LGMPHeaderQueue
 
   uint32_t position;
   uint32_t messagesOffset;
+  uint64_t timeout[32];
 };
 
 struct LGMPHeader

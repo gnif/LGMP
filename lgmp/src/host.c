@@ -174,7 +174,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
         const uint64_t timeout = now + LGMP_MAX_QUEUE_TIMEOUT;
         for(unsigned int id = 0; id < 32; ++id)
           if (newBadSubs & (1 << id))
-            queue->timeout[id] = timeout;
+            hq->timeout[id] = timeout;
       }
 
       // clear the pending subs
@@ -191,18 +191,6 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
       // decrement the queue and check if we need to update the timeout
       if (queue->count--)
         queue->msgTimeout = now + LGMP_MAX_MESSAGE_AGE;
-    }
-
-    // recover subs for reuse that have been flagged as bad and have exceeded the queue timeout
-    if (LGMP_SUBS_ON(subs))
-    {
-      uint32_t reap = 0;
-      for(unsigned int id = 0; id < 32; ++id)
-      {
-        if ((LGMP_SUBS_BAD(subs) & (1 << id)) && now > queue->timeout[id])
-          reap |= (1 << id);
-      }
-      subs = LGMP_SUBS_CLEAR(subs, reap);
     }
 
     atomic_store(&hq->subs, subs);

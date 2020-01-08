@@ -143,11 +143,24 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPCQueu
 
   // take the queue lock
   while(atomic_flag_test_and_set(&hq->lock)) {};
-  const uint64_t subs = atomic_load(&hq->subs);
+  uint64_t subs = atomic_load(&hq->subs);
+
+  // recover subs for reuse that have been flagged as bad and have exceeded the queue timeout
+  if (LGMP_SUBS_ON(subs))
+  {
+    const uint64_t now = lgmpGetClockMS();
+    uint32_t reap = 0;
+    for(unsigned int id = 0; id < 32; ++id)
+    {
+      if ((LGMP_SUBS_BAD(subs) & (1 << id)) && now > hq->timeout[id])
+        reap |= (1 << id);
+    }
+    subs = LGMP_SUBS_CLEAR(subs, reap);
+  }
 
   // find the next free queue ID
   unsigned int id = 0;
-  while(id < 32 && (LGMP_SUBS_ON(hq->subs) & (1U << id)))
+  while(id < 32 && ((LGMP_SUBS_ON(subs) | LGMP_SUBS_BAD(subs)) & (1U << id)))
     ++id;
 
   // check if full
@@ -157,7 +170,8 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPCQueu
     return LGMP_ERR_QUEUE_FULL; //TODO: better return error
   }
 
-  atomic_fetch_or  (&hq->subs, LGMP_SUBS_SET(0, 1U << id));
+  subs = LGMP_SUBS_SET(subs, 1U << id);
+  atomic_store(&hq->subs, subs);
   atomic_flag_clear(&hq->lock);
 
   q->client   = client;

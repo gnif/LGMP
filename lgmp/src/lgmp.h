@@ -40,7 +40,6 @@ struct LGMPHQueue
 
   unsigned int start;
   uint64_t     msgTimeout;
-  uint64_t     timeout[32];
 };
 
 struct LGMPMemory
