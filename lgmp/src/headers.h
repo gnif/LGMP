@@ -18,6 +18,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
 #include <stdint.h>
+#include <stdatomic.h>
 
 #define LGMP_PROTOCOL_MAGIC   0x504d474c
 #define LGMP_PROTOCOL_VERSION 1
@@ -41,6 +42,7 @@ struct LGMPHeaderQueue
   uint32_t badSubs;
 
   uint32_t position;
+  uint32_t count;
   uint32_t messagesOffset;
 };
 

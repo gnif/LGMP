@@ -26,6 +26,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdatomic.h>
 
 #define LGMP_MAX_MESSAGE_AGE   150   //150ms
 #define LGMP_MAX_QUEUE_TIMEOUT 10000 //10s
@@ -102,9 +103,6 @@ LGMP_STATUS lgmpHostAddQueue(LGMPHost host, uint32_t type, uint32_t numMessages,
   if (host->header->numQueues == LGMP_MAX_QUEUES)
     return LGMP_ERR_NO_QUEUES;
 
-  // we need an extra message to mark the end of the ring
-  numMessages += 1;
-
   const size_t needed = sizeof(struct LGMPHeaderMessage) * numMessages;
   if (host->avail < needed)
     return LGMP_ERR_NO_SHARED_MEM;
@@ -117,16 +115,16 @@ LGMP_STATUS lgmpHostAddQueue(LGMPHost host, uint32_t type, uint32_t numMessages,
   queue->index      = host->header->numQueues;
   queue->position   = 0;
   queue->start      = 0;
-  queue->count      = 0;
   queue->msgTimeout = lgmpGetClock() + LGMP_MAX_MESSAGE_AGE;
 
   struct LGMPHeaderQueue * hq = &host->header->queues[host->header->numQueues++];
   hq->type           = type;
   hq->numMessages    = numMessages;
-  hq->lock           = 0;
+  atomic_flag_clear(&hq->lock);
   hq->subs           = 0;
   hq->badSubs        = 0;
   hq->position       = 0;
+  hq->count          = 0;
   hq->messagesOffset = host->nextFree;
 
   host->avail    -= needed;
@@ -151,18 +149,18 @@ LGMP_STATUS lgmpHostProcess(LGMPHost host)
       (host->mem + hq->messagesOffset);
 
     // check the first message
-    if(queue->count)
+    if(__atomic_load_n(&hq->count, __ATOMIC_ACQUIRE))
     {
       struct LGMPHeaderMessage *msg = &messages[queue->start];
-      if ((msg->pendingSubs & ~hq->badSubs) && now > queue->msgTimeout)
+      if ((atomic_load(&msg->pendingSubs) & ~atomic_load(&hq->badSubs)) &&
+          now > queue->msgTimeout)
       {
-        printf("Timeout %08x %lu %lu\n", msg->pendingSubs, now, queue->msgTimeout);
         // take the queue lock
-        while(__sync_lock_test_and_set(&hq->lock, 1)) while(hq->lock);
+        while(atomic_flag_test_and_set(&hq->lock)) {};
 
         // get the new bad subscribers
         const uint32_t newBadSubs = hq->subs & msg->pendingSubs;
-        __sync_fetch_and_or(&hq->badSubs, newBadSubs);
+        atomic_fetch_or(&hq->badSubs, newBadSubs);
 
         // reset garbage collection timeout for new bad subs
         if (newBadSubs)
@@ -174,8 +172,8 @@ LGMP_STATUS lgmpHostProcess(LGMPHost host)
         }
 
         // clear the pending subs and release the queue lock
-        __sync_fetch_and_and(&msg->pendingSubs, 0);
-        __sync_lock_release(&hq->lock);
+        atomic_fetch_and(&msg->pendingSubs, 0);
+        atomic_flag_clear(&hq->lock);
       }
 
       if (!(msg->pendingSubs & ~hq->badSubs))
@@ -185,7 +183,7 @@ LGMP_STATUS lgmpHostProcess(LGMPHost host)
           queue->start = 0;
 
         // decrement the queue and check if we need to update the timeout
-        if (__sync_fetch_and_sub(&queue->count, 1))
+        if (__atomic_fetch_sub(&hq->count, 1, __ATOMIC_RELEASE))
           queue->msgTimeout = now + LGMP_MAX_MESSAGE_AGE;
       }
     }
@@ -203,14 +201,14 @@ LGMP_STATUS lgmpHostProcess(LGMPHost host)
       if (reap)
       {
         // take the queue lock
-        while(__sync_lock_test_and_set(&hq->lock, 1)) while(hq->lock);
+        while(atomic_flag_test_and_set(&hq->lock)) {};
 
         // clear the reaped subs
-        __sync_fetch_and_and(&hq->badSubs, ~reap);
-        __sync_fetch_and_and(&hq->subs   , ~reap);
+        atomic_fetch_and(&hq->badSubs, ~reap);
+        atomic_fetch_and(&hq->subs   , ~reap);
 
         // relese the lock
-        __sync_lock_release(&hq->lock);
+        atomic_flag_clear(&hq->lock);
       }
     }
   }
@@ -263,7 +261,7 @@ LGMP_STATUS lgmpHostPost(LGMPQueue queue, uint32_t type, LGMPMemory payload)
   struct LGMPHeaderQueue *hq = &queue->host->header->queues[queue->index];
 
   // we should never fully fill the buffer
-  if (queue->count == hq->numMessages - 1)
+  if (atomic_load(&hq->count) == hq->numMessages)
     return LGMP_ERR_QUEUE_FULL;
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
@@ -275,24 +273,17 @@ LGMP_STATUS lgmpHostPost(LGMPQueue queue, uint32_t type, LGMPMemory payload)
   msg->size        = payload->size;
   msg->offset      = payload->offset;
 
-  // take the queue lock
-  while(__sync_lock_test_and_set(&hq->lock, 1)) while(hq->lock);
-
   // copy the subs into the message
-  msg->pendingSubs = hq->subs & ~hq->badSubs;
-
-  // release the lock
-  __sync_lock_release(&hq->lock);
+  while(atomic_flag_test_and_set(&hq->lock)) {};
+  msg->pendingSubs = atomic_load(&hq->subs) & ~atomic_load(&hq->badSubs);
+  atomic_flag_clear(&hq->lock);
 
   // increment the queue count, if it were zero update the msgTimeout
-  if (!__sync_fetch_and_add(&queue->count, 1))
+  if (!atomic_fetch_add(&hq->count, 1))
     queue->msgTimeout = lgmpGetClock() + LGMP_MAX_MESSAGE_AGE;
 
   if (++queue->position == hq->numMessages)
     queue->position = 0;
 
-  if (hq->position == hq->numMessages - 1)
-    hq->position = 0;
-  else
-    ++hq->position;
+  atomic_store(&hq->position, queue->position);
 }

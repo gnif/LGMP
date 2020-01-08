@@ -26,6 +26,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdatomic.h>
 
 #define LGMP_HEARTBEAT_TIMEOUT 200
 
@@ -137,7 +138,7 @@ LGMP_STATUS lgmpClientSubscribe(LGMPClient client, uint32_t type, LGMPQueue * re
   LGMPQueue q = *result;
 
   // take the queue lock
-  while(__sync_lock_test_and_set(&hq->lock, 1)) while(hq->lock);
+  while(atomic_flag_test_and_set(&hq->lock)) {};
 
   // find the next free queue ID
   unsigned int id = 0;
@@ -147,13 +148,13 @@ LGMP_STATUS lgmpClientSubscribe(LGMPClient client, uint32_t type, LGMPQueue * re
   // check if full
   if (id == 32)
   {
-    __sync_lock_release(&hq->lock);
+    atomic_flag_clear(&hq->lock);
     return LGMP_ERR_QUEUE_FULL; //TODO: better return error
   }
 
   // set the queue bit and release the lock
-  __sync_or_and_fetch(&hq->subs, (1 << id));
-  __sync_lock_release(&hq->lock);
+  atomic_fetch_or(&hq->subs, (1 << id));
+  atomic_flag_clear(&hq->lock);
 
   q->host     = NULL;
   q->client   = client;
@@ -172,16 +173,12 @@ LGMP_STATUS lgmpClientUnsubscribe(LGMPQueue * result)
 
   struct LGMPHeaderQueue *hq = &queue->client->header->queues[queue->index];
 
-  const unsigned int bit = 1 << queue->id;
+  const uint32_t bit = 1U << queue->id;
   if (hq->badSubs & bit)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
-  // take the queue lock
-  while(__sync_lock_test_and_set(&hq->lock, 1)) while(hq->lock);
-
-  // unset the queue id bit and release the lock
-  __sync_and_and_fetch(&hq->subs, ~bit);
-  __sync_lock_release(&hq->lock);
+  // unset the queue id bit
+  atomic_fetch_and(&hq->subs, ~bit);
 
   memset(queue, 0, sizeof(struct LGMPQueue));
   *result = NULL;
@@ -196,14 +193,15 @@ LGMP_STATUS lgmpClientProcess(LGMPQueue queue, LGMPMessage * result)
 
   struct LGMPHeaderQueue *hq = &queue->client->header->queues[queue->index];
 
-  const unsigned int bit = 1 << queue->id;
+  const uint32_t bit = 1U << queue->id;
   if (hq->badSubs & bit)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
   if (!(hq->subs & bit))
     return LGMP_ERR_QUEUE_UNSUBSCRIBED;
 
-  if (hq->position == queue->position)
+  if (__atomic_load_n(&hq->position, __ATOMIC_CONSUME) == queue->position &&
+      __atomic_load_n(&hq->count   , __ATOMIC_CONSUME) == 0)
     return LGMP_ERR_QUEUE_EMPTY;
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
@@ -223,14 +221,15 @@ LGMP_STATUS lgmpClientMessageDone(LGMPQueue queue)
 
   struct LGMPHeaderQueue *hq = &queue->client->header->queues[queue->index];
 
-  const unsigned int bit = 1 << queue->id;
+  const uint32_t bit = 1U << queue->id;
   if (hq->badSubs & bit)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
   if (!(hq->subs & bit))
     return LGMP_ERR_QUEUE_UNSUBSCRIBED;
 
-  if (hq->position == queue->position)
+  if (__atomic_load_n(&hq->position, __ATOMIC_CONSUME) == queue->position &&
+      __atomic_load_n(&hq->count   , __ATOMIC_CONSUME) == 0)
     return LGMP_ERR_QUEUE_EMPTY;
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
@@ -238,7 +237,9 @@ LGMP_STATUS lgmpClientMessageDone(LGMPQueue queue)
   struct LGMPHeaderMessage *msg = &messages[queue->position];
 
   // turn off the pending bit for our queue
-  __sync_fetch_and_and(&msg->pendingSubs, ~bit);
+  while(atomic_flag_test_and_set(&hq->lock)) {};
+  atomic_fetch_and(&msg->pendingSubs, ~bit);
+  atomic_flag_clear(&hq->lock);
 
   if (++queue->position == hq->numMessages)
     queue->position = 0;

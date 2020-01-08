@@ -26,11 +26,10 @@ struct LGMPQueue
   LGMPClient    client;
   unsigned int  id;
   unsigned int  index;
-  unsigned int  position;
+  uint32_t      position;
 
   // host only
   unsigned int start;
-  unsigned int count;
   uint64_t     msgTimeout;
   uint64_t     timeout[32];
 };

@@ -93,7 +93,7 @@ int main(int argc, char * argv[])
       }
     }
 
-//    printf("Got %4u: %s\n", msg.type, (char *)msg.mem);
+    printf("Got %4u: %s\n", msg.type, (char *)msg.mem);
     if (!lastType)
       lastType = msg.type;
     else
