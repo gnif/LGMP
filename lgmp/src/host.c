@@ -40,7 +40,7 @@ struct LGMPHost
   bool      started;
 
   struct LGMPHeader * header;
-  struct LGMPQueue    queues[LGMP_MAX_QUEUES];
+  struct LGMPHQueue    queues[LGMP_MAX_QUEUES];
 };
 
 LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result)
@@ -96,7 +96,7 @@ void lgmpHostFree(PLGMPHost * host)
   *host = NULL;
 }
 
-LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t type, uint32_t numMessages, PLGMPQueue * result)
+LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t type, uint32_t numMessages, PLGMPHQueue * result)
 {
   assert(host);
   assert(result);
@@ -113,10 +113,9 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t type, uint32_t numMessages
     return LGMP_ERR_NO_SHARED_MEM;
 
   *result = &host->queues[host->header->numQueues];
-  PLGMPQueue queue = *result;
+  PLGMPHQueue queue = *result;
 
   queue->host       = host;
-  queue->client     = NULL;
   queue->index      = host->header->numQueues;
   queue->position   = 0;
   queue->start      = 0;
@@ -148,7 +147,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
   // each queue
   for(unsigned int i = 0; i < host->header->numQueues; ++i)
   {
-    struct LGMPQueue         *queue    = &host->queues[i];
+    struct LGMPHQueue         *queue    = &host->queues[i];
     struct LGMPHeaderQueue   *hq       = &host->header->queues[i];
     struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
       (host->mem + hq->messagesOffset);
@@ -261,7 +260,7 @@ void * lgmpHostMemPtr(PLGMPMemory mem)
   return mem->mem;
 }
 
-LGMP_STATUS lgmpHostPost(PLGMPQueue queue, uint32_t type, PLGMPMemory payload)
+LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t type, PLGMPMemory payload)
 {
   struct LGMPHeaderQueue *hq = &queue->host->header->queues[queue->index];
 

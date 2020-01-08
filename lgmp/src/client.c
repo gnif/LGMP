@@ -39,7 +39,7 @@ struct LGMPClient
   uint32_t            heartbeat;
   uint64_t            lastHeartbeat;
 
-  struct LGMPQueue    queues[LGMP_MAX_QUEUES];
+  struct LGMPCQueue   queues[LGMP_MAX_QUEUES];
 };
 
 LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
@@ -119,7 +119,7 @@ bool lgmpClientSessionValid(PLGMPClient client)
   return true;
 }
 
-LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t type, PLGMPQueue * result)
+LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t type, PLGMPCQueue * result)
 {
   assert(client);
   assert(result);
@@ -139,7 +139,7 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t type, PLGMPQueue * 
     return LGMP_ERR_NO_SUCH_QUEUE;
 
   *result      = &client->queues[queueIndex];
-  PLGMPQueue q = *result;
+  PLGMPCQueue q = *result;
 
   // take the queue lock
   while(atomic_flag_test_and_set(&hq->lock)) {};
@@ -160,7 +160,6 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t type, PLGMPQueue * 
   atomic_fetch_or(&hq->subs, (1 << id));
   atomic_flag_clear(&hq->lock);
 
-  q->host     = NULL;
   q->client   = client;
   q->index    = queueIndex;
   q->id       = id;
@@ -169,10 +168,10 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t type, PLGMPQueue * 
   return LGMP_OK;
 }
 
-LGMP_STATUS lgmpClientUnsubscribe(PLGMPQueue * result)
+LGMP_STATUS lgmpClientUnsubscribe(PLGMPCQueue * result)
 {
   assert(*result);
-  PLGMPQueue queue = *result;
+  PLGMPCQueue queue = *result;
   assert(queue->client);
 
   struct LGMPHeaderQueue *hq = &queue->client->header->queues[queue->index];
@@ -184,13 +183,13 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPQueue * result)
   // unset the queue id bit
   atomic_fetch_and(&hq->subs, ~bit);
 
-  memset(queue, 0, sizeof(struct LGMPQueue));
+  memset(queue, 0, sizeof(struct LGMPCQueue));
   *result = NULL;
 
   return LGMP_OK;
 }
 
-LGMP_STATUS lgmpClientProcess(PLGMPQueue queue, PLGMPMessage result)
+LGMP_STATUS lgmpClientProcess(PLGMPCQueue queue, PLGMPMessage result)
 {
   assert(queue);
   assert(result);
@@ -219,7 +218,7 @@ LGMP_STATUS lgmpClientProcess(PLGMPQueue queue, PLGMPMessage result)
   return LGMP_OK;
 }
 
-LGMP_STATUS lgmpClientMessageDone(PLGMPQueue queue)
+LGMP_STATUS lgmpClientMessageDone(PLGMPCQueue queue)
 {
   assert(queue);
 

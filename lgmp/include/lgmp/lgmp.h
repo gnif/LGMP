@@ -26,7 +26,8 @@ extern "C" {
 
 typedef struct LGMPHost   * PLGMPHost;
 typedef struct LGMPClient * PLGMPClient;
-typedef struct LGMPQueue  * PLGMPQueue;
+typedef struct LGMPHQueue * PLGMPHQueue;
+typedef struct LGMPCQueue * PLGMPCQueue;
 typedef struct LGMPMemory * PLGMPMemory;
 
 #ifdef __cplusplus

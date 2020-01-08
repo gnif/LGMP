@@ -23,15 +23,20 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include "lgmp/lgmp.h"
 #include <time.h>
 
-struct LGMPQueue
+struct LGMPCQueue
 {
-  PLGMPHost     host;
   PLGMPClient   client;
   unsigned int  id;
   unsigned int  index;
   uint32_t      position;
+};
 
-  // host only
+struct LGMPHQueue
+{
+  PLGMPHost    host;
+  unsigned int index;
+  uint32_t     position;
+
   unsigned int start;
   uint64_t     msgTimeout;
   uint64_t     timeout[32];

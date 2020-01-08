@@ -63,7 +63,7 @@ int main(int argc, char * argv[])
     }
   }
 
-  PLGMPQueue queue;
+  PLGMPCQueue queue;
   while((status = lgmpClientSubscribe(client, 0, &queue)) != LGMP_OK)
   {
     if (status == LGMP_ERR_NO_SUCH_QUEUE)

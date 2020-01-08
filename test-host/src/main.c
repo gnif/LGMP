@@ -60,7 +60,7 @@ int main(int argc, char * argv[])
     goto out_unmap;
   }
 
-  PLGMPQueue queue;
+  PLGMPHQueue queue;
   if ((status = lgmpHostAddQueue(host, 0, 10, &queue)) != LGMP_OK)
   {
     printf("lgmpHostAddQueue failed: %s\n", lgmpStatusString(status));
