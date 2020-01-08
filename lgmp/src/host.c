@@ -142,7 +142,7 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessa
 LGMP_STATUS lgmpHostProcess(PLGMPHost host)
 {
   assert(host);
-  ++host->header->heartbeat;
+  atomic_fetch_add(&host->header->heartbeat, 1);
   const uint64_t now = lgmpGetClockMS();
 
   // each queue
@@ -256,6 +256,14 @@ LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t udata, PLGMPMemory payload)
 {
   struct LGMPHeaderQueue *hq = &queue->host->header->queues[queue->index];
 
+  // get the subscribers
+  const uint64_t subs = atomic_load(&hq->subs);
+  const uint32_t pend = LGMP_SUBS_ON(subs) & ~(LGMP_SUBS_BAD(subs));
+
+  // if nobody has subscribed there is no point in posting the message
+  if (!pend)
+    return LGMP_OK;
+
   // we should never fully fill the buffer
   if (queue->count == hq->numMessages - 1)
     return LGMP_ERR_QUEUE_FULL;
@@ -265,13 +273,10 @@ LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t udata, PLGMPMemory payload)
 
   struct LGMPHeaderMessage *msg = &messages[queue->position];
 
-  msg->udata  = udata;
-  msg->size   = payload->size;
-  msg->offset = payload->offset;
-
-  // copy the subs into the message
-  uint64_t subs = atomic_load(&hq->subs);
-  msg->pendingSubs = LGMP_SUBS_ON(subs) & ~(LGMP_SUBS_BAD(subs));
+  msg->udata       = udata;
+  msg->size        = payload->size;
+  msg->offset      = payload->offset;
+  msg->pendingSubs = pend;
 
   // increment the queue count, if it were zero update the msgTimeout
   if (queue->count++ == 0)

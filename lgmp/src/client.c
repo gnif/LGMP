@@ -64,7 +64,7 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
     return LGMP_ERR_INVALID_VERSION;
 
   // sleep for the timeout to see if the host is alive and updating the heartbeat
-  const uint32_t heartbeat = header->heartbeat;
+  const uint32_t heartbeat = atomic_load(&header->heartbeat);
   usleep(LGMP_HEARTBEAT_TIMEOUT * 1000);
   if (header->heartbeat == heartbeat)
     return LGMP_ERR_INVALID_SESSION;
@@ -147,7 +147,7 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPCQueu
 
   // find the next free queue ID
   unsigned int id = 0;
-  while(id < 32 && LGMP_SUBS_ON(hq->subs) & (1 << id))
+  while(id < 32 && (LGMP_SUBS_ON(hq->subs) & (1U << id)))
     ++id;
 
   // check if full

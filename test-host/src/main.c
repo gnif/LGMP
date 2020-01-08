@@ -92,7 +92,7 @@ int main(int argc, char * argv[])
 
   while(true)
   {
-    while((status = lgmpHostPost(queue, count, mem[count % 10])) != LGMP_ERR_QUEUE_FULL)
+    if((status = lgmpHostPost(queue, count, mem[count % 10])) != LGMP_ERR_QUEUE_FULL)
       ++count;
 
     if (lgmpHostProcess(host) != LGMP_OK)
