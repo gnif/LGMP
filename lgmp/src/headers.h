@@ -45,7 +45,6 @@ struct LGMPHeaderQueue
   uint32_t badSubs;
 
   uint32_t position;
-  uint32_t count;
   uint32_t messagesOffset;
 };
 

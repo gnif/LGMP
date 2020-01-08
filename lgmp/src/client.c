@@ -203,8 +203,7 @@ LGMP_STATUS lgmpClientProcess(PLGMPCQueue queue, PLGMPMessage result)
   if (!(hq->subs & bit))
     return LGMP_ERR_QUEUE_UNSUBSCRIBED;
 
-  if (__atomic_load_n(&hq->position, __ATOMIC_CONSUME) == queue->position &&
-      __atomic_load_n(&hq->count   , __ATOMIC_CONSUME) == 0)
+  if (hq->position == queue->position)
     return LGMP_ERR_QUEUE_EMPTY;
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
@@ -231,8 +230,7 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPCQueue queue)
   if (!(hq->subs & bit))
     return LGMP_ERR_QUEUE_UNSUBSCRIBED;
 
-  if (__atomic_load_n(&hq->position, __ATOMIC_CONSUME) == queue->position &&
-      __atomic_load_n(&hq->count   , __ATOMIC_CONSUME) == 0)
+  if (hq->position == queue->position)
     return LGMP_ERR_QUEUE_EMPTY;
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
