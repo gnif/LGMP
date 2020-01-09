@@ -192,13 +192,18 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPCQueue * result)
   struct LGMPHeaderQueue *hq = &queue->client->header->queues[queue->index];
 
   const uint32_t bit = 1U << queue->id;
+
+  while(atomic_flag_test_and_set(&hq->lock)) {};
   uint64_t subs = atomic_load(&hq->subs);
   if (LGMP_SUBS_BAD(subs) & bit)
+  {
+    atomic_flag_clear(&hq->lock);
     return LGMP_ERR_QUEUE_TIMEOUT;
+  }
 
   // unset the queue id bit
-  while(atomic_flag_test_and_set(&hq->lock)) {};
-  atomic_fetch_and(&hq->subs, ~bit);
+  subs = LGMP_SUBS_CLEAR(subs, bit);
+  atomic_store(&hq->subs, subs);
   atomic_flag_clear(&hq->lock);
 
   memset(queue, 0, sizeof(struct LGMPCQueue));
