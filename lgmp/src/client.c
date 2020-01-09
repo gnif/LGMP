@@ -63,11 +63,13 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
   if (header->version != LGMP_PROTOCOL_VERSION)
     return LGMP_ERR_INVALID_VERSION;
 
+#ifndef LGMP_REALACY
   // sleep for the timeout to see if the host is alive and updating the heartbeat
   const uint64_t hosttime = atomic_load(&header->timestamp);
   usleep(LGMP_HEARTBEAT_TIMEOUT * 1000);
   if (atomic_load(&header->timestamp) == hosttime)
     return LGMP_ERR_INVALID_SESSION;
+#endif
 
   *result = malloc(sizeof(struct LGMPClient));
   if (!*result)
@@ -102,6 +104,8 @@ bool lgmpClientSessionValid(PLGMPClient client)
   if (client->sessionID != client->header->sessionID)
     return false;
 
+#ifndef LGMP_REALACY
+
   // check if the heartbeat changed
   const uint64_t hosttime = atomic_load(&client->header->timestamp);
   const uint64_t now      = lgmpGetClockMS();
@@ -115,6 +119,8 @@ bool lgmpClientSessionValid(PLGMPClient client)
   // check if the heartbeat timeout has been exceeded
   if (now - client->lastHeartbeat > LGMP_HEARTBEAT_TIMEOUT)
     return false;
+
+#endif
 
   return true;
 }

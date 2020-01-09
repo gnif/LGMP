@@ -28,8 +28,13 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <unistd.h>
 #include <stdatomic.h>
 
+#ifndef LGMP_REALCY
 #define LGMP_MAX_MESSAGE_AGE   150   //150ms
 #define LGMP_MAX_QUEUE_TIMEOUT 10000 //10s
+#else
+#define LGMP_MAX_MESSAGE_AGE   1500   //1500ms
+#define LGMP_MAX_QUEUE_TIMEOUT 100000 //100s
+#endif
 
 struct LGMPHQueue
 {
@@ -188,7 +193,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     uint32_t pend = atomic_load(&msg->pendingSubs);
 
     const uint32_t newBadSubs = pend & ~LGMP_SUBS_BAD(subs);
-    if (newBadSubs && now > queue->msgTimeout)
+    if (newBadSubs && now > atomic_load(&queue->msgTimeout))
     {
       // reset garbage collection timeout for new bad subs
       subs = LGMP_SUBS_OR_BAD(subs, newBadSubs);
@@ -210,7 +215,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
 
       // decrement the queue and check if we need to update the timeout
       if (atomic_fetch_sub(&queue->count, 1) == 1)
-        queue->msgTimeout = now + LGMP_MAX_MESSAGE_AGE;
+        atomic_store(&queue->msgTimeout, now + LGMP_MAX_MESSAGE_AGE);
     }
 
     atomic_store(&hq->subs, subs);
@@ -295,7 +300,7 @@ LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t udata, PLGMPMemory payload)
   // increment the queue count, if it were zero update the msgTimeout
   while(atomic_flag_test_and_set(&hq->lock)) {};
   if (atomic_fetch_add(&queue->count, 1) == 0)
-    queue->msgTimeout = lgmpGetClockMS() + LGMP_MAX_MESSAGE_AGE;
+    atomic_store(&queue->msgTimeout, lgmpGetClockMS() + LGMP_MAX_MESSAGE_AGE);
   atomic_flag_clear(&hq->lock);
 
   if (++queue->position == hq->numMessages)
