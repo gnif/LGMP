@@ -112,7 +112,7 @@ void lgmpHostFree(PLGMPHost * host)
   *host = NULL;
 }
 
-LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHostQueue * result)
+LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHostQueue * result)
 {
   assert(host);
   assert(result);
@@ -156,7 +156,7 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessa
   return LGMP_OK;
 }
 
-uint32_t lgmpHostNewSubCount(PLGMPHostQueue queue)
+uint32_t lgmpHostQueueNewSubs(PLGMPHostQueue queue)
 {
   assert(queue);
   return atomic_exchange(&queue->host->header->queues[queue->index].newSubCount, 0);
@@ -271,7 +271,7 @@ void * lgmpHostMemPtr(PLGMPMemory mem)
   return mem->mem;
 }
 
-LGMP_STATUS lgmpHostPost(PLGMPHostQueue queue, uint32_t udata, PLGMPMemory payload)
+LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata, PLGMPMemory payload)
 {
   struct LGMPHeaderQueue *hq = &queue->host->header->queues[queue->index];
 

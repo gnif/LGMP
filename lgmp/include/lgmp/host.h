@@ -31,13 +31,14 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 extern "C" {
 #endif
 
-LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result);
-void lgmpHostFree(PLGMPHost * host);
-
-LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHostQueue * result);
-uint32_t    lgmpHostNewSubCount(PLGMPHostQueue queue);
-uint32_t    lgmpHostQueuePending(PLGMPHostQueue queue);
+LGMP_STATUS lgmpHostInit   (void *mem, const size_t size, PLGMPHost * result);
+void        lgmpHostFree   (PLGMPHost * host);
 LGMP_STATUS lgmpHostProcess(PLGMPHost host);
+
+LGMP_STATUS lgmpHostQueueNew    (PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHostQueue * result);
+uint32_t    lgmpHostQueueNewSubs(PLGMPHostQueue queue);
+uint32_t    lgmpHostQueuePending(PLGMPHostQueue queue);
+LGMP_STATUS lgmpHostQueuePost   (PLGMPHostQueue queue, uint32_t udata, PLGMPMemory payload);
 
 /**
  * Allocates some RAM for application use from the shared memory
@@ -50,8 +51,6 @@ size_t      lgmpHostMemAvail(PLGMPHost host);
 LGMP_STATUS lgmpHostMemAlloc(PLGMPHost host, uint32_t size, PLGMPMemory * result);
 void        lgmpHostMemFree (PLGMPMemory * mem);
 void *      lgmpHostMemPtr  (PLGMPMemory mem);
-
-LGMP_STATUS lgmpHostPost(PLGMPHostQueue queue, uint32_t udata, PLGMPMemory payload);
 
 #ifdef __cplusplus
 }

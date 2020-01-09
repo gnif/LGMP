@@ -61,9 +61,9 @@ int main(int argc, char * argv[])
   }
 
   PLGMPHostQueue queue;
-  if ((status = lgmpHostAddQueue(host, 0, 10, &queue)) != LGMP_OK)
+  if ((status = lgmpHostQueueNew(host, 0, 10, &queue)) != LGMP_OK)
   {
-    printf("lgmpHostAddQueue failed: %s\n", lgmpStatusString(status));
+    printf("lgmpHostQueueNew failed: %s\n", lgmpStatusString(status));
     goto out_lgmphost;
   }
 
@@ -92,17 +92,17 @@ int main(int argc, char * argv[])
 
   while(true)
   {
-    if((status = lgmpHostPost(queue, count, mem[count % 10])) != LGMP_ERR_QUEUE_FULL)
+    if((status = lgmpHostQueuePost(queue, count, mem[count % 10])) != LGMP_ERR_QUEUE_FULL)
       ++count;
 
     if (lgmpHostProcess(host) != LGMP_OK)
     {
-      printf("lgmpHostPost Failed: %s\n", lgmpStatusString(status));
+      printf("lgmpHostQueuePost Failed: %s\n", lgmpStatusString(status));
       break;
     }
 
     uint32_t newSubs;
-    if ((newSubs = lgmpHostNewSubCount(queue)) > 0)
+    if ((newSubs = lgmpHostQueueNewSubs(queue)) > 0)
       printf("newSubs: %u\n", newSubs);
 
 //    usleep(1);

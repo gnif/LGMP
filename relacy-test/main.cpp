@@ -14,9 +14,9 @@ public:
       return false;
     }
 
-    if ((status = lgmpHostAddQueue(m_host, 0, 10, &m_hqueue)) != LGMP_OK)
+    if ((status = lgmpHostQueueNew(m_host, 0, 10, &m_hqueue)) != LGMP_OK)
     {
-      printf("lgmpHostAddQueue: %s\n", lgmpStatusString(status));
+      printf("lgmpHostQueueNew: %s\n", lgmpStatusString(status));
       return false;
     }
 
@@ -67,7 +67,7 @@ public:
 
   LGMP_STATUS enqueue()
   {
-    return lgmpHostPost(m_hqueue, 0, m_mem);
+    return lgmpHostQueuePost(m_hqueue, 0, m_mem);
   }
 
   LGMP_STATUS peek()
