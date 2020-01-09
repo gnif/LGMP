@@ -53,7 +53,7 @@ inline static uint64_t lgmpGetClockMS()
 
   LARGE_INTEGER time;
   QueryPerformanceCounter(&time);
-  return time.QuadPart / (freq.QuadPart / 1000000000ULL);
+  return time.QuadPart * 1000ULL / freq.QuadPart;
 #else
   struct timespec tsnow;
   if (clock_gettime(CLOCK_MONOTONIC, &tsnow) != 0)
