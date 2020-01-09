@@ -31,6 +31,17 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #define LGMP_MAX_MESSAGE_AGE   150   //150ms
 #define LGMP_MAX_QUEUE_TIMEOUT 10000 //10s
 
+struct LGMPHQueue
+{
+  PLGMPHost    host;
+  unsigned int index;
+  uint32_t     position;
+  uint32_t     count;
+
+  unsigned int start;
+  uint64_t     msgTimeout;
+};
+
 struct LGMPHost
 {
   uint8_t * mem;
@@ -40,7 +51,7 @@ struct LGMPHost
   bool      started;
 
   struct LGMPHeader * header;
-  struct LGMPHQueue    queues[LGMP_MAX_QUEUES];
+  struct LGMPHQueue   queues[LGMP_MAX_QUEUES];
 };
 
 LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result)
@@ -128,6 +139,7 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessa
   struct LGMPHeaderQueue * hq = &host->header->queues[host->header->numQueues++];
   hq->queueID        = queueID;
   hq->numMessages    = numMessages;
+  hq->newSubCount    = 0;
   atomic_flag_clear(&hq->lock);
   hq->subs           = 0;
   hq->position       = 0;
@@ -137,6 +149,12 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessa
   host->nextFree += needed;
 
   return LGMP_OK;
+}
+
+uint32_t lgmpHostNewSubCount(PLGMPHQueue queue)
+{
+  assert(queue);
+  return atomic_exchange(&queue->host->header->queues[queue->index].newSubCount, 0);
 }
 
 LGMP_STATUS lgmpHostProcess(PLGMPHost host)

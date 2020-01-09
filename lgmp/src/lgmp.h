@@ -36,17 +36,6 @@ struct LGMPCQueue
   uint32_t      position;
 };
 
-struct LGMPHQueue
-{
-  PLGMPHost    host;
-  unsigned int index;
-  uint32_t     position;
-  uint32_t     count;
-
-  unsigned int start;
-  uint64_t     msgTimeout;
-};
-
 struct LGMPMemory
 {
   PLGMPHost    host;

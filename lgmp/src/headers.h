@@ -45,6 +45,7 @@ struct LGMPHeaderQueue
 {
   uint32_t queueID;
   uint32_t numMessages;
+  uint32_t newSubCount;
 
   uint32_t lock;
   uint64_t subs; // see LGMP_SUBS_* macros

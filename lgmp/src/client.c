@@ -173,6 +173,7 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPCQueu
   subs = LGMP_SUBS_SET(subs, 1U << id);
   atomic_store(&hq->subs, subs);
   atomic_flag_clear(&hq->lock);
+  atomic_fetch_add(&hq->newSubCount, 1);
 
   q->client   = client;
   q->index    = queueIndex;

@@ -101,6 +101,10 @@ int main(int argc, char * argv[])
       break;
     }
 
+    uint32_t newSubs;
+    if ((newSubs = lgmpHostNewSubCount(queue)) > 0)
+      printf("newSubs: %u\n", newSubs);
+
 //    usleep(1);
   }
 
