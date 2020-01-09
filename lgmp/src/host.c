@@ -200,7 +200,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
   return LGMP_OK;
 }
 
-size_t lgmpHostMemAvail(PLGMPHost host);
+size_t lgmpHostMemAvail(PLGMPHost host)
 {
   assert(host);
   return host->avail;
