@@ -78,7 +78,7 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result)
     host->header->sessionID = rand();
 
   host->header->magic     = LGMP_PROTOCOL_MAGIC;
-  host->header->heartbeat = 0;
+  host->header->timestamp = lgmpGetClockMS();
   host->header->version   = LGMP_PROTOCOL_VERSION;
   host->header->caps      = 0;
   host->header->numQueues = 0;
@@ -142,8 +142,8 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessa
 LGMP_STATUS lgmpHostProcess(PLGMPHost host)
 {
   assert(host);
-  atomic_fetch_add(&host->header->heartbeat, 1);
   const uint64_t now = lgmpGetClockMS();
+  atomic_store(&host->header->timestamp, now);
 
   // each queue
   for(unsigned int i = 0; i < host->header->numQueues; ++i)

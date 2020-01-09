@@ -93,7 +93,9 @@ int main(int argc, char * argv[])
       }
     }
 
-    printf("Got %4u: %s\n", msg.udata, (char *)msg.mem);
+    if (delay)
+      printf("Got %4u: %s\n", msg.udata, (char *)msg.mem);
+
     if (!lastCount)
       lastCount = msg.udata;
     else

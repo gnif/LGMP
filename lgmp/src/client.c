@@ -36,7 +36,7 @@ struct LGMPClient
   struct LGMPHeader * header;
 
   uint32_t            sessionID;
-  uint32_t            heartbeat;
+  uint64_t            hosttime;
   uint64_t            lastHeartbeat;
 
   struct LGMPCQueue   queues[LGMP_MAX_QUEUES];
@@ -64,9 +64,9 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
     return LGMP_ERR_INVALID_VERSION;
 
   // sleep for the timeout to see if the host is alive and updating the heartbeat
-  const uint32_t heartbeat = atomic_load(&header->heartbeat);
+  const uint64_t hosttime = atomic_load(&header->timestamp);
   usleep(LGMP_HEARTBEAT_TIMEOUT * 1000);
-  if (header->heartbeat == heartbeat)
+  if (atomic_load(&header->timestamp) == hosttime)
     return LGMP_ERR_INVALID_SESSION;
 
   *result = malloc(sizeof(struct LGMPClient));
@@ -77,7 +77,7 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
   client->mem           = (uint8_t*)mem;
   client->header        = header;
   client->sessionID     = header->sessionID;
-  client->heartbeat     = header->heartbeat;
+  client->hosttime      = header->timestamp;
   client->lastHeartbeat = lgmpGetClockMS();
 
   memset(&client->queues, 0, sizeof(client->queues));
@@ -102,13 +102,13 @@ bool lgmpClientSessionValid(PLGMPClient client)
   if (client->sessionID != client->header->sessionID)
     return false;
 
-  const uint64_t now = lgmpGetClockMS();
-
   // check if the heartbeat changed
-  if (client->heartbeat != client->header->heartbeat)
+  const uint64_t hosttime = atomic_load(&client->header->timestamp);
+  const uint64_t now      = lgmpGetClockMS();
+  if (client->hosttime != hosttime)
   {
     client->lastHeartbeat = now;
-    client->heartbeat     = client->header->heartbeat;
+    client->hosttime      = hosttime;
     return true;
   }
 
@@ -148,11 +148,11 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPCQueu
   // recover subs for reuse that have been flagged as bad and have exceeded the queue timeout
   if (LGMP_SUBS_ON(subs))
   {
-    const uint64_t now = lgmpGetClockMS();
+    const uint64_t hosttime = atomic_load(&client->header->timestamp);
     uint32_t reap = 0;
     for(unsigned int id = 0; id < 32; ++id)
     {
-      if ((LGMP_SUBS_BAD(subs) & (1 << id)) && now > hq->timeout[id])
+      if ((LGMP_SUBS_BAD(subs) & (1 << id)) && hosttime > hq->timeout[id])
         reap |= (1 << id);
     }
     subs = LGMP_SUBS_CLEAR(subs, reap);
