@@ -34,9 +34,9 @@ extern "C" {
 LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result);
 void lgmpHostFree(PLGMPHost * host);
 
-LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHQueue * result);
-uint32_t    lgmpHostNewSubCount(PLGMPHQueue queue);
-uint32_t    lgmpHostQueuePending(PLGMPHQueue queue);
+LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHostQueue * result);
+uint32_t    lgmpHostNewSubCount(PLGMPHostQueue queue);
+uint32_t    lgmpHostQueuePending(PLGMPHostQueue queue);
 LGMP_STATUS lgmpHostProcess(PLGMPHost host);
 
 /**
@@ -51,7 +51,7 @@ LGMP_STATUS lgmpHostMemAlloc(PLGMPHost host, uint32_t size, PLGMPMemory * result
 void        lgmpHostMemFree (PLGMPMemory * mem);
 void *      lgmpHostMemPtr  (PLGMPMemory mem);
 
-LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t udata, PLGMPMemory payload);
+LGMP_STATUS lgmpHostPost(PLGMPHostQueue queue, uint32_t udata, PLGMPMemory payload);
 
 #ifdef __cplusplus
 }

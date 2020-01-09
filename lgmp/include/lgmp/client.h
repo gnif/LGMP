@@ -35,8 +35,8 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result);
 void        lgmpClientFree(PLGMPClient * client);
 bool        lgmpClientSessionValid(PLGMPClient client);
 
-LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPCQueue * result);
-LGMP_STATUS lgmpClientUnsubscribe(PLGMPCQueue * result);
+LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPClientQueue * result);
+LGMP_STATUS lgmpClientUnsubscribe(PLGMPClientQueue * result);
 
 typedef struct
 {
@@ -46,8 +46,8 @@ typedef struct
 }
 LGMPMessage, * PLGMPMessage;
 
-LGMP_STATUS lgmpClientProcess(PLGMPCQueue queue, PLGMPMessage result);
-LGMP_STATUS lgmpClientMessageDone(PLGMPCQueue queue);
+LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result);
+LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue);
 
 #ifdef __cplusplus
 }

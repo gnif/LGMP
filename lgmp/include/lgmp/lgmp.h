@@ -24,11 +24,11 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 extern "C" {
 #endif
 
-typedef struct LGMPHost   * PLGMPHost;
-typedef struct LGMPClient * PLGMPClient;
-typedef struct LGMPHQueue * PLGMPHQueue;
-typedef struct LGMPCQueue * PLGMPCQueue;
-typedef struct LGMPMemory * PLGMPMemory;
+typedef struct LGMPHost        * PLGMPHost;
+typedef struct LGMPClient      * PLGMPClient;
+typedef struct LGMPHostQueue   * PLGMPHostQueue;
+typedef struct LGMPClientQueue * PLGMPClientQueue;
+typedef struct LGMPMemory      * PLGMPMemory;
 
 #ifdef __cplusplus
 }

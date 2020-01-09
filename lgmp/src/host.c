@@ -36,7 +36,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #define LGMP_MAX_QUEUE_TIMEOUT 100000 //100s
 #endif
 
-struct LGMPHQueue
+struct LGMPHostQueue
 {
   PLGMPHost    host;
   unsigned int index;
@@ -56,7 +56,7 @@ struct LGMPHost
   bool      started;
 
   struct LGMPHeader * header;
-  struct LGMPHQueue   queues[LGMP_MAX_QUEUES];
+  struct LGMPHostQueue   queues[LGMP_MAX_QUEUES];
 };
 
 LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result)
@@ -112,7 +112,7 @@ void lgmpHostFree(PLGMPHost * host)
   *host = NULL;
 }
 
-LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHQueue * result)
+LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHostQueue * result)
 {
   assert(host);
   assert(result);
@@ -132,7 +132,7 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessa
     return LGMP_ERR_NO_SHARED_MEM;
 
   *result = &host->queues[host->header->numQueues];
-  PLGMPHQueue queue = *result;
+  PLGMPHostQueue queue = *result;
 
   queue->host       = host;
   queue->index      = host->header->numQueues;
@@ -156,13 +156,13 @@ LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessa
   return LGMP_OK;
 }
 
-uint32_t lgmpHostNewSubCount(PLGMPHQueue queue)
+uint32_t lgmpHostNewSubCount(PLGMPHostQueue queue)
 {
   assert(queue);
   return atomic_exchange(&queue->host->header->queues[queue->index].newSubCount, 0);
 }
 
-uint32_t lgmpHostQueuePending(PLGMPHQueue queue)
+uint32_t lgmpHostQueuePending(PLGMPHostQueue queue)
 {
   assert(queue);
   return atomic_load(&queue->count);
@@ -177,7 +177,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
   // each queue
   for(unsigned int i = 0; i < host->header->numQueues; ++i)
   {
-    struct LGMPHQueue *queue = &host->queues[i];
+    struct LGMPHostQueue *queue = &host->queues[i];
 
     // check the first message
     if(!atomic_load(&queue->count))
@@ -271,7 +271,7 @@ void * lgmpHostMemPtr(PLGMPMemory mem)
   return mem->mem;
 }
 
-LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t udata, PLGMPMemory payload)
+LGMP_STATUS lgmpHostPost(PLGMPHostQueue queue, uint32_t udata, PLGMPMemory payload)
 {
   struct LGMPHeaderQueue *hq = &queue->host->header->queues[queue->index];
 

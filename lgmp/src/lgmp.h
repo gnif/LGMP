@@ -28,14 +28,6 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <time.h>
 #endif
 
-struct LGMPCQueue
-{
-  PLGMPClient   client;
-  unsigned int  id;
-  unsigned int  index;
-  uint32_t      position;
-};
-
 struct LGMPMemory
 {
   PLGMPHost    host;
