@@ -21,7 +21,12 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #define LGMP_PRIVATE_LGMP_H
 
 #include "lgmp/lgmp.h"
+
+#if defined(_WIN32)
+#include <windows.h>
+#else
 #include <time.h>
+#endif
 
 struct LGMPCQueue
 {
@@ -52,10 +57,20 @@ struct LGMPMemory
 
 inline static uint64_t lgmpGetClockMS()
 {
+#if defined(_WIN32)
+  static LARGE_INTEGER freq = { 0 };
+  if (!freq.QuadPart)
+    QueryPerformanceFrequency(&freq);
+
+  LARGE_INTEGER time;
+  QueryPerformanceCounter(&time);
+  return time.QuadPart / (freq.QuadPart / 1000000000ULL);
+#else
   struct timespec tsnow;
   if (clock_gettime(CLOCK_MONOTONIC, &tsnow) != 0)
     return 0;
-  return (uint64_t)tsnow.tv_sec * 1000U + (uint64_t)tsnow.tv_nsec / 1000000U;
+  return (uint64_t)tsnow.tv_sec * 1000ULL + (uint64_t)tsnow.tv_nsec / 1000000ULL;
+#endif
 }
 
 #endif
