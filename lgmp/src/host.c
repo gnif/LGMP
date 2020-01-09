@@ -274,4 +274,5 @@ LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t udata, PLGMPMemory payload)
     queue->position = 0;
 
   atomic_store(&hq->position, queue->position);
+  return LGMP_OK;
 }

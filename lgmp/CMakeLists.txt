@@ -6,6 +6,17 @@ include_directories(include)
 set(SOURCES
 	src/host.c
 	src/client.c
+	src/status.c
+)
+
+add_compile_options(
+  "-Wall"
+  "-Werror"
+  "-Wfatal-errors"
+  "-ffast-math"
+  "-fdata-sections"
+  "-ffunction-sections"
+  "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb>"
 )
 
 add_library(lgmp STATIC ${SOURCES})
