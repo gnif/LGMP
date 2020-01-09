@@ -157,6 +157,12 @@ uint32_t lgmpHostNewSubCount(PLGMPHQueue queue)
   return atomic_exchange(&queue->host->header->queues[queue->index].newSubCount, 0);
 }
 
+uint32_t lgmpHostQueuePending(PLGMPHQueue queue)
+{
+  assert(queue);
+  return atomic_load(&queue->count);
+}
+
 LGMP_STATUS lgmpHostProcess(PLGMPHost host)
 {
   assert(host);
@@ -169,7 +175,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     struct LGMPHQueue *queue = &host->queues[i];
 
     // check the first message
-    if(!queue->count)
+    if(!atomic_load(&queue->count))
       continue;
 
     struct LGMPHeaderQueue   *hq       = &host->header->queues[i];
@@ -207,7 +213,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
         queue->start = 0;
 
       // decrement the queue and check if we need to update the timeout
-      if (queue->count--)
+      if (atomic_fetch_sub(&queue->count, 1) == 1)
         queue->msgTimeout = now + LGMP_MAX_MESSAGE_AGE;
     }
 
@@ -277,7 +283,7 @@ LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t udata, PLGMPMemory payload)
     return LGMP_OK;
 
   // we should never fully fill the buffer
-  if (queue->count == hq->numMessages - 1)
+  if (atomic_load(&queue->count) == hq->numMessages - 1)
     return LGMP_ERR_QUEUE_FULL;
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
@@ -291,7 +297,7 @@ LGMP_STATUS lgmpHostPost(PLGMPHQueue queue, uint32_t udata, PLGMPMemory payload)
   msg->pendingSubs = pend;
 
   // increment the queue count, if it were zero update the msgTimeout
-  if (queue->count++ == 0)
+  if (atomic_fetch_add(&queue->count, 1) == 0)
     queue->msgTimeout = lgmpGetClockMS() + LGMP_MAX_MESSAGE_AGE;
 
   if (++queue->position == hq->numMessages)

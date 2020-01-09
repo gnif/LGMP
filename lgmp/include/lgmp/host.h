@@ -36,6 +36,7 @@ void lgmpHostFree(PLGMPHost * host);
 
 LGMP_STATUS lgmpHostAddQueue(PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHQueue * result);
 uint32_t    lgmpHostNewSubCount(PLGMPHQueue queue);
+uint32_t    lgmpHostQueuePending(PLGMPHQueue queue);
 LGMP_STATUS lgmpHostProcess(PLGMPHost host);
 
 /**
