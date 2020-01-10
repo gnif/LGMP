@@ -45,6 +45,8 @@ struct LGMPHostQueue
 
   unsigned int start;
   uint64_t     msgTimeout;
+
+  struct LGMPHeaderQueue * hq;
 };
 
 struct LGMPHost
@@ -55,7 +57,7 @@ struct LGMPHost
   size_t    nextFree;
   bool      started;
 
-  struct LGMPHeader * header;
+  struct LGMPHeader    * header;
   struct LGMPHostQueue   queues[LGMP_MAX_QUEUES];
 };
 
@@ -134,13 +136,6 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, uint32_t queueID, uint32_t numMessa
   *result = &host->queues[host->header->numQueues];
   PLGMPHostQueue queue = *result;
 
-  queue->host       = host;
-  queue->index      = host->header->numQueues;
-  queue->position   = 0;
-  queue->count      = 0;
-  queue->start      = 0;
-  queue->msgTimeout = lgmpGetClockMS() + LGMP_MAX_MESSAGE_AGE;
-
   struct LGMPHeaderQueue * hq = &host->header->queues[host->header->numQueues++];
   hq->queueID        = queueID;
   hq->numMessages    = numMessages;
@@ -149,6 +144,14 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, uint32_t queueID, uint32_t numMessa
   hq->subs           = 0;
   hq->position       = 0;
   hq->messagesOffset = host->nextFree;
+
+  queue->host       = host;
+  queue->index      = host->header->numQueues;
+  queue->position   = 0;
+  queue->count      = 0;
+  queue->start      = 0;
+  queue->msgTimeout = lgmpGetClockMS() + LGMP_MAX_MESSAGE_AGE;
+  queue->hq         = hq;
 
   host->avail    -= needed;
   host->nextFree += needed;
@@ -159,7 +162,7 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, uint32_t queueID, uint32_t numMessa
 uint32_t lgmpHostQueueNewSubs(PLGMPHostQueue queue)
 {
   assert(queue);
-  return atomic_exchange(&queue->host->header->queues[queue->index].newSubCount, 0);
+  return atomic_exchange(&queue->hq->newSubCount, 0);
 }
 
 uint32_t lgmpHostQueuePending(PLGMPHostQueue queue)
@@ -183,7 +186,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     if(!atomic_load(&queue->count))
       continue;
 
-    struct LGMPHeaderQueue   *hq       = &host->header->queues[i];
+    struct LGMPHeaderQueue   *hq       = queue->hq;
     struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
       (host->mem + hq->messagesOffset);
     struct LGMPHeaderMessage *msg = &messages[queue->start];
@@ -273,7 +276,7 @@ void * lgmpHostMemPtr(PLGMPMemory mem)
 
 LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata, PLGMPMemory payload)
 {
-  struct LGMPHeaderQueue *hq = &queue->host->header->queues[queue->index];
+  struct LGMPHeaderQueue *hq = queue->hq;
 
   // get the subscribers
   const uint64_t subs = atomic_load(&hq->subs);

@@ -36,6 +36,8 @@ struct LGMPClientQueue
   unsigned int  id;
   unsigned int  index;
   uint32_t      position;
+
+  struct LGMPHeaderQueue * hq;
 };
 
 struct LGMPClient
@@ -193,6 +195,7 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPClien
   q->index    = queueIndex;
   q->id       = id;
   q->position = hq->position;
+  q->hq       = hq;
 
   return LGMP_OK;
 }
@@ -203,8 +206,7 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPClientQueue * result)
   PLGMPClientQueue queue = *result;
   assert(queue->client);
 
-  struct LGMPHeaderQueue *hq = &queue->client->header->queues[queue->index];
-
+  struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
 
   while(atomic_flag_test_and_set(&hq->lock)) {};
@@ -231,8 +233,7 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
   assert(queue);
   assert(result);
 
-  struct LGMPHeaderQueue *hq = &queue->client->header->queues[queue->index];
-
+  struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
   const uint64_t subs = atomic_load(&hq->subs);
 
@@ -260,8 +261,7 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
 {
   assert(queue);
 
-  struct LGMPHeaderQueue *hq = &queue->client->header->queues[queue->index];
-
+  struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
   const uint64_t subs = atomic_load(&hq->subs);
 
