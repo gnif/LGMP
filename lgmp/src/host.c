@@ -174,8 +174,7 @@ uint32_t lgmpHostQueuePending(PLGMPHostQueue queue)
 LGMP_STATUS lgmpHostProcess(PLGMPHost host)
 {
   assert(host);
-  const uint64_t now = lgmpGetClockMS();
-  atomic_store(&host->header->timestamp, now);
+  atomic_store(&host->header->timestamp, lgmpGetClockMS());
 
   // each queue
   for(unsigned int i = 0; i < host->header->numQueues; ++i)
@@ -192,6 +191,8 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     struct LGMPHeaderMessage *msg = &messages[queue->start];
 
     while(atomic_flag_test_and_set(&hq->lock)) {};
+
+    const uint64_t now = lgmpGetClockMS();
     uint64_t subs = atomic_load(&hq->subs);
     uint32_t pend = atomic_load(&msg->pendingSubs);
 

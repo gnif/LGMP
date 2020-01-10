@@ -246,24 +246,26 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
   if (!(LGMP_SUBS_ON(subs) & bit))
     return LGMP_ERR_QUEUE_UNSUBSCRIBED;
 
-  uint32_t last = atomic_load(&hq->position);
-  if (last == queue->position)
+  uint32_t end = atomic_load(&hq->position);
+  if (end == queue->position)
     return LGMP_ERR_QUEUE_EMPTY;
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
     (queue->client->mem + hq->messagesOffset);
 
+  uint32_t next = queue->position;
+  uint32_t last;
   while(true)
   {
-    uint32_t next = queue->position + 1;
-    if (next == hq->numMessages)
+    last = next;
+    if (++next == hq->numMessages)
       next = 0;
 
-    if (next == last)
+    if (next == end)
       break;
 
     // turn off the pending bit for our queue
-    struct LGMPHeaderMessage *msg = &messages[next];
+    struct LGMPHeaderMessage *msg = &messages[last];
     atomic_fetch_and(&msg->pendingSubs, ~bit);
   }
 

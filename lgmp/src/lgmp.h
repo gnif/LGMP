@@ -36,16 +36,21 @@ struct LGMPMemory
   void        *mem;
 };
 
+// returns a milliseond resolution monotonic counter
 inline static uint64_t lgmpGetClockMS()
 {
 #if defined(_WIN32)
-  static LARGE_INTEGER freq = { 0 };
+  static LARGE_INTEGER freq  = { 0 };
+  static LARGE_INTEGER start = { 0 };
   if (!freq.QuadPart)
+  {
     QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&start);
+  }
 
   LARGE_INTEGER time;
   QueryPerformanceCounter(&time);
-  return time.QuadPart * 1000ULL / freq.QuadPart;
+  return ((time.QuadPart - start.QuadPart) * 1000ULL) / freq.QuadPart;
 #else
   struct timespec tsnow;
   if (clock_gettime(CLOCK_MONOTONIC, &tsnow) != 0)
