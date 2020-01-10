@@ -35,7 +35,14 @@ LGMP_STATUS lgmpHostInit   (void *mem, const size_t size, PLGMPHost * result);
 void        lgmpHostFree   (PLGMPHost * host);
 LGMP_STATUS lgmpHostProcess(PLGMPHost host);
 
-LGMP_STATUS lgmpHostQueueNew    (PLGMPHost host, uint32_t queueID, uint32_t numMessages, PLGMPHostQueue * result);
+struct LGMPQueueConfig
+{
+  uint32_t queueID;     // application defined queue ID
+  uint32_t numMessages; // number of messages in the queue
+  uint32_t subTimeout;  // length of time in ms to wait before removing a subscriber
+};
+
+LGMP_STATUS lgmpHostQueueNew    (PLGMPHost host, const struct LGMPQueueConfig config, PLGMPHostQueue * result);
 uint32_t    lgmpHostQueueNewSubs(PLGMPHostQueue queue);
 uint32_t    lgmpHostQueuePending(PLGMPHostQueue queue);
 LGMP_STATUS lgmpHostQueuePost   (PLGMPHostQueue queue, uint32_t udata, PLGMPMemory payload);

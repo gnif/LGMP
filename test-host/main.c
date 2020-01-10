@@ -60,8 +60,15 @@ int main(int argc, char * argv[])
     goto out_unmap;
   }
 
+  const struct LGMPQueueConfig conf =
+  {
+    .queueID     = 0,
+    .numMessages = 10,
+    .subTimeout  = 150
+  };
+
   PLGMPHostQueue queue;
-  if ((status = lgmpHostQueueNew(host, 0, 10, &queue)) != LGMP_OK)
+  if ((status = lgmpHostQueueNew(host, conf, &queue)) != LGMP_OK)
   {
     printf("lgmpHostQueueNew failed: %s\n", lgmpStatusString(status));
     goto out_lgmphost;

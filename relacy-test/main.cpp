@@ -14,7 +14,14 @@ public:
       return false;
     }
 
-    if ((status = lgmpHostQueueNew(m_host, 0, 10, &m_hqueue)) != LGMP_OK)
+    const struct LGMPQueueConfig conf =
+    {
+      .queueID     = 0,
+      .numMessages = 10,
+      .subTimeout  = 10000
+    };
+
+    if ((status = lgmpHostQueueNew(m_host, conf, &m_hqueue)) != LGMP_OK)
     {
       printf("lgmpHostQueueNew: %s\n", lgmpStatusString(status));
       return false;
