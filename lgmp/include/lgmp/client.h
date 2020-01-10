@@ -46,6 +46,7 @@ typedef struct
 }
 LGMPMessage, * PLGMPMessage;
 
+LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue);
 LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result);
 LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue);
 

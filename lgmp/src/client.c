@@ -232,6 +232,45 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPClientQueue * result)
   return LGMP_OK;
 }
 
+LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
+{
+  assert(queue);
+
+  struct LGMPHeaderQueue *hq = queue->hq;
+  const uint32_t bit = 1U << queue->id;
+  const uint64_t subs = atomic_load(&hq->subs);
+
+  if (LGMP_SUBS_BAD(subs) & bit)
+    return LGMP_ERR_QUEUE_TIMEOUT;
+
+  if (!(LGMP_SUBS_ON(subs) & bit))
+    return LGMP_ERR_QUEUE_UNSUBSCRIBED;
+
+  uint32_t last = atomic_load(&hq->position);
+  if (last == queue->position)
+    return LGMP_ERR_QUEUE_EMPTY;
+
+  struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
+    (queue->client->mem + hq->messagesOffset);
+
+  while(true)
+  {
+    uint32_t next = queue->position + 1;
+    if (next == hq->numMessages)
+      next = 0;
+
+    if (next == last)
+      break;
+
+    // turn off the pending bit for our queue
+    struct LGMPHeaderMessage *msg = &messages[next];
+    atomic_fetch_and(&msg->pendingSubs, ~bit);
+  }
+
+  queue->position = last;
+  return LGMP_OK;
+}
+
 LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
 {
   assert(queue);
