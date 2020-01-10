@@ -218,7 +218,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
         queue->start = 0;
 
       // decrement the queue and check if we need to update the timeout
-      if (atomic_fetch_sub(&queue->count, 1) == 1)
+      if (atomic_fetch_sub(&queue->count, 1) > 1)
         atomic_store(&queue->msgTimeout, now + LGMP_MAX_MESSAGE_AGE);
     }
 
