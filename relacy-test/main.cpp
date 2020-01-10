@@ -83,11 +83,11 @@ public:
 
 private:
   PLGMPHost    m_host   = NULL;
-  PLGMPHQueue  m_hqueue = NULL;
+  PLGMPHostQueue  m_hqueue = NULL;
   PLGMPMemory  m_mem    = NULL;
 
   PLGMPClient  m_client = NULL;
-  PLGMPCQueue  m_cqueue = NULL;
+  PLGMPClientQueue  m_cqueue = NULL;
 };
 
 struct QueueTest : rl::test_suite<QueueTest, 60>
