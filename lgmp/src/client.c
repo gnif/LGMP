@@ -202,7 +202,11 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPClien
 
 LGMP_STATUS lgmpClientUnsubscribe(PLGMPClientQueue * result)
 {
-  assert(*result);
+  assert(result);
+
+  if (!*result)
+    return LGMP_OK;
+
   PLGMPClientQueue queue = *result;
   assert(queue->client);
 
