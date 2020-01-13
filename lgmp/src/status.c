@@ -27,6 +27,7 @@ const char * lgmpStatusString(LGMP_STATUS status)
     case LGMP_ERR_CLOCK_FAILURE     : return "LGMP_CLOCK_FAILURE";
     case LGMP_ERR_INVALID_ARGUMENT  : return "LGMP_ERR_INVALID_ARGUMENT";
     case LGMP_ERR_INVALID_SIZE      : return "LGMP_ERR_INVALID_SIZE";
+    case LGMP_ERR_INVALID_ALIGNMENT : return "LGMP_ERR_INVALID_ALIGNMENT";
     case LGMP_ERR_INVALID_SESSION   : return "LGMP_ERR_INVALID_SESSION";
     case LGMP_ERR_NO_MEM            : return "LGMP_ERR_NO_MEM";
     case LGMP_ERR_NO_SHARED_MEM     : return "LGMP_ERR_NO_SHARED_MEM";

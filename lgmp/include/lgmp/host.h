@@ -54,10 +54,11 @@ LGMP_STATUS lgmpHostQueuePost   (PLGMPHostQueue queue, uint32_t udata, PLGMPMemo
  * the LGMPMemory structure, but does not recover the shared memory for later
  * use.
  */
-size_t      lgmpHostMemAvail(PLGMPHost host);
-LGMP_STATUS lgmpHostMemAlloc(PLGMPHost host, uint32_t size, PLGMPMemory * result);
-void        lgmpHostMemFree (PLGMPMemory * mem);
-void *      lgmpHostMemPtr  (PLGMPMemory mem);
+size_t      lgmpHostMemAvail       (PLGMPHost host);
+LGMP_STATUS lgmpHostMemAlloc       (PLGMPHost host, uint32_t size, PLGMPMemory * result);
+LGMP_STATUS lgmpHostMemAllocAligned(PLGMPHost host, uint32_t size, uint32_t alignment, PLGMPMemory * result);
+void        lgmpHostMemFree        (PLGMPMemory * mem);
+void *      lgmpHostMemPtr         (PLGMPMemory mem);
 
 #ifdef __cplusplus
 }

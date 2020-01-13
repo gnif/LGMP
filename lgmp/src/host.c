@@ -233,10 +233,26 @@ size_t lgmpHostMemAvail(PLGMPHost host)
 
 LGMP_STATUS lgmpHostMemAlloc(PLGMPHost host, uint32_t size, PLGMPMemory *result)
 {
+  return lgmpHostMemAllocAligned(host, size, 0, result);
+}
+
+LGMP_STATUS lgmpHostMemAllocAligned(PLGMPHost host, uint32_t size, uint32_t alignment, PLGMPMemory *result)
+{
   assert(host);
   assert(result);
 
-  if (size > host->avail)
+  uint32_t nextFree = host->nextFree;
+  if (alignment > 0)
+  {
+    // alignment must be a power of two
+    if ((alignment & (alignment - 1)) != 0)
+      return LGMP_ERR_INVALID_ALIGNMENT;
+
+    size     = (size     + (alignment - 1)) & ~(alignment - 1);
+    nextFree = (nextFree + (alignment - 1)) & ~(alignment - 1);
+  }
+
+  if (size > host->avail - (nextFree - host->nextFree))
     return LGMP_ERR_NO_SHARED_MEM;
 
   *result = malloc(sizeof(struct LGMPMemory));
@@ -245,12 +261,12 @@ LGMP_STATUS lgmpHostMemAlloc(PLGMPHost host, uint32_t size, PLGMPMemory *result)
 
   PLGMPMemory mem = *result;
   mem->host   = host;
-  mem->offset = host->nextFree;
+  mem->offset = nextFree;
   mem->size   = size;
-  mem->mem    = host->mem + host->nextFree;
+  mem->mem    = host->mem + nextFree;
 
-  host->nextFree += size;
-  host->avail    -= size;
+  host->avail   -= (nextFree - host->nextFree) + size;
+  host->nextFree = nextFree + size;
 
   return LGMP_OK;
 }
