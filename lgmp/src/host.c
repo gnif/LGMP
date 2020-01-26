@@ -184,38 +184,45 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     struct LGMPHeaderQueue   *hq       = queue->hq;
     struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
       (host->mem + hq->messagesOffset);
-    struct LGMPHeaderMessage *msg = &messages[queue->start];
 
     while(atomic_flag_test_and_set(&hq->lock)) {};
-
+    uint64_t      subs = atomic_load(&hq->subs);
     const uint64_t now = lgmpGetClockMS();
-    uint64_t subs = atomic_load(&hq->subs);
-    uint32_t pend = atomic_load(&msg->pendingSubs);
 
-    const uint32_t newBadSubs = pend & ~LGMP_SUBS_BAD(subs);
-    if (newBadSubs && now > atomic_load(&queue->msgTimeout))
+    for(;;)
     {
-      // reset garbage collection timeout for new bad subs
-      subs = LGMP_SUBS_OR_BAD(subs, newBadSubs);
-      const uint64_t timeout = now + LGMP_MAX_QUEUE_TIMEOUT;
-      for(unsigned int id = 0; id < 32; ++id)
-        if (newBadSubs & (1 << id))
-          hq->timeout[id] = timeout;
+      struct LGMPHeaderMessage *msg = &messages[queue->start];
+      uint32_t pend = atomic_load(&msg->pendingSubs);
 
-      // clear the pending subs
-      atomic_store(&msg->pendingSubs, 0);
-      pend = 0;
-    }
+      const uint32_t newBadSubs = pend & ~LGMP_SUBS_BAD(subs);
+      if (newBadSubs && now > atomic_load(&queue->msgTimeout))
+      {
+        // reset garbage collection timeout for new bad subs
+        subs = LGMP_SUBS_OR_BAD(subs, newBadSubs);
+        const uint64_t timeout = now + LGMP_MAX_QUEUE_TIMEOUT;
+        for(unsigned int id = 0; id < 32; ++id)
+          if (newBadSubs & (1 << id))
+            hq->timeout[id] = timeout;
 
-    if (!(pend & ~LGMP_SUBS_BAD(subs)))
-    {
+        // clear the pending subs
+        atomic_store(&msg->pendingSubs, 0);
+        pend = 0;
+      }
+
+      // if there are still valid pending subs break out
+      if (pend & ~LGMP_SUBS_BAD(subs))
+        break;
+
       // message finished
       if (++queue->start == hq->numMessages)
         queue->start = 0;
 
-      // decrement the queue and check if we need to update the timeout
-      if (atomic_fetch_sub(&queue->count, 1) > 1)
-        atomic_store(&queue->msgTimeout, now + queue->maxTime);
+      // decrement the queue count and break out if there are no more messages
+      if (atomic_fetch_sub(&queue->count, 1) == 1)
+        break;
+
+      // update the timeout
+      atomic_store(&queue->msgTimeout, now + queue->maxTime);
     }
 
     atomic_store(&hq->subs, subs);
