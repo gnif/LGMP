@@ -338,25 +338,35 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
   if ((atomic_fetch_and(&msg->pendingSubs, ~bit) & ~bit) == 0)
   {
     // if we are the last subscriber update the host queue position
-    while(atomic_flag_test_and_set(&hq->lock)) {};
-    uint32_t start = atomic_load(&hq->start);
-
-    // check if the host process loop has not already done this
-    if (start == queue->position)
+    // but only if we can quickly get the lock
+    int retry = 100;
+    while(atomic_flag_test_and_set(&hq->lock))
     {
-      // message finished
-      if (++start == hq->numMessages)
-        start = 0;
+      if (--retry == 0)
+        break;
+    };
 
-      // decrement the count and update the timeout if needed
-      if (atomic_fetch_sub(&hq->count, 1) > 1)
-        atomic_store(&hq->msgTimeout,
-            atomic_load(&queue->header->timestamp) + hq->maxTime);
+    if (retry > 0)
+    {
+      uint32_t start = atomic_load(&hq->start);
 
-      atomic_store(&hq->start, start);
+      // check if the host process loop has not already done this
+      if (start == queue->position)
+      {
+        // message finished
+        if (++start == hq->numMessages)
+          start = 0;
+
+        // decrement the count and update the timeout if needed
+        if (atomic_fetch_sub(&hq->count, 1) > 1)
+          atomic_store(&hq->msgTimeout,
+              atomic_load(&queue->header->timestamp) + hq->maxTime);
+
+        atomic_store(&hq->start, start);
+      }
+
+      atomic_flag_clear(&hq->lock);
     }
-
-    atomic_flag_clear(&hq->lock);
   }
 
   if (++queue->position == hq->numMessages)
