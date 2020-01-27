@@ -35,11 +35,8 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 
 #define LGMP_QUEUE_LOCK(hq) \
   while (atomic_flag_test_and_set_explicit(&hq->lock, memory_order_acquire)) { ; }
-#define LGMP_QUEUE_UNLOCK(hq) { \
-  atomic_thread_fence(memory_order_release); \
-  atomic_flag_clear_explicit(&hq->lock, memory_order_release); \
-}
-
+#define LGMP_QUEUE_UNLOCK(hq) \
+  atomic_flag_clear_explicit(&hq->lock, memory_order_release);
 
 struct LGMPHeaderMessage
 {

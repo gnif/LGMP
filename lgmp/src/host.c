@@ -171,17 +171,17 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
   // each queue
   for(unsigned int i = 0; i < host->header->numQueues; ++i)
   {
-    struct LGMPHostQueue *queue = &host->queues[i];
-
-    // check the first message
-    if(!atomic_load(&queue->hq->count))
-      continue;
-
+    struct LGMPHostQueue     *queue    = &host->queues[i];
     struct LGMPHeaderQueue   *hq       = queue->hq;
     struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
       (host->mem + hq->messagesOffset);
 
     LGMP_QUEUE_LOCK(hq);
+    if(!atomic_load(&queue->hq->count))
+    {
+      LGMP_QUEUE_UNLOCK(hq);
+      continue;
+    }
 
     uint64_t      subs = atomic_load(&hq->subs);
     const uint64_t now = lgmpGetClockMS();
