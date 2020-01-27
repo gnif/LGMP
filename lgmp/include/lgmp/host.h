@@ -42,10 +42,12 @@ struct LGMPQueueConfig
   uint32_t subTimeout;  // length of time in ms to wait before removing a subscriber
 };
 
-LGMP_STATUS lgmpHostQueueNew    (PLGMPHost host, const struct LGMPQueueConfig config, PLGMPHostQueue * result);
+LGMP_STATUS lgmpHostQueueNew    (PLGMPHost host,
+    const struct LGMPQueueConfig config, PLGMPHostQueue * result);
 uint32_t    lgmpHostQueueNewSubs(PLGMPHostQueue queue);
 uint32_t    lgmpHostQueuePending(PLGMPHostQueue queue);
-LGMP_STATUS lgmpHostQueuePost   (PLGMPHostQueue queue, uint32_t udata, PLGMPMemory payload);
+LGMP_STATUS lgmpHostQueuePost   (PLGMPHostQueue queue, uint32_t udata,
+    PLGMPMemory payload);
 
 /**
  * Allocates some RAM for application use from the shared memory
@@ -55,8 +57,10 @@ LGMP_STATUS lgmpHostQueuePost   (PLGMPHostQueue queue, uint32_t udata, PLGMPMemo
  * use.
  */
 size_t      lgmpHostMemAvail       (PLGMPHost host);
-LGMP_STATUS lgmpHostMemAlloc       (PLGMPHost host, uint32_t size, PLGMPMemory * result);
-LGMP_STATUS lgmpHostMemAllocAligned(PLGMPHost host, uint32_t size, uint32_t alignment, PLGMPMemory * result);
+LGMP_STATUS lgmpHostMemAlloc       (PLGMPHost host, uint32_t size,
+    PLGMPMemory * result);
+LGMP_STATUS lgmpHostMemAllocAligned(PLGMPHost host, uint32_t size,
+    uint32_t alignment, PLGMPMemory * result);
 void        lgmpHostMemFree        (PLGMPMemory * mem);
 void *      lgmpHostMemPtr         (PLGMPMemory mem);
 

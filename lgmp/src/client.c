@@ -135,7 +135,8 @@ bool lgmpClientSessionValid(PLGMPClient client)
   return true;
 }
 
-LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPClientQueue * result)
+LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
+    PLGMPClientQueue * result)
 {
   assert(client);
   assert(result);
@@ -161,7 +162,8 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID, PLGMPClien
   while(atomic_flag_test_and_set(&hq->lock)) {};
   uint64_t subs = atomic_load(&hq->subs);
 
-  // recover subs for reuse that have been flagged as bad and have exceeded the queue timeout
+  // recover subs for reuse that have been flagged as bad and have exceeded the
+  // queue timeout
   if (LGMP_SUBS_ON(subs))
   {
     const uint64_t hosttime = atomic_load(&client->header->timestamp);

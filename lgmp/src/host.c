@@ -109,7 +109,8 @@ void lgmpHostFree(PLGMPHost * host)
   *host = NULL;
 }
 
-LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config, PLGMPHostQueue * result)
+LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config,
+    PLGMPHostQueue * result)
 {
   assert(host);
   assert(result);
@@ -243,7 +244,8 @@ LGMP_STATUS lgmpHostMemAlloc(PLGMPHost host, uint32_t size, PLGMPMemory *result)
   return lgmpHostMemAllocAligned(host, size, 0, result);
 }
 
-LGMP_STATUS lgmpHostMemAllocAligned(PLGMPHost host, uint32_t size, uint32_t alignment, PLGMPMemory *result)
+LGMP_STATUS lgmpHostMemAllocAligned(PLGMPHost host, uint32_t size,
+    uint32_t alignment, PLGMPMemory *result)
 {
   assert(host);
   assert(result);
@@ -294,7 +296,8 @@ void * lgmpHostMemPtr(PLGMPMemory mem)
   return mem->mem;
 }
 
-LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata, PLGMPMemory payload)
+LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
+    PLGMPMemory payload)
 {
   struct LGMPHeaderQueue *hq = queue->hq;
 
