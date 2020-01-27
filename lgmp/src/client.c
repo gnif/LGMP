@@ -297,27 +297,23 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
 
       if (locked)
       {
-        uint32_t start = atomic_load(&hq->start);
-
         // check if the host process loop has not already done this
-        if (start == queue->position)
+        if (hq->start == queue->position)
         {
           // message finished
-          if (++start == hq->numMessages)
-            start = 0;
+          if (++hq->start == hq->numMessages)
+            hq->start = 0;
 
           // decrement the count and update the timeout if needed
-          if (atomic_fetch_sub(&hq->count, 1) > 1)
-            atomic_store(&hq->msgTimeout,
-                atomic_load(&queue->header->timestamp) + hq->maxTime);
-
-          atomic_store(&hq->start, start);
+          if (atomic_fetch_sub(&hq->count, 1) == 1)
+            hq->msgTimeout =
+              atomic_load(&queue->header->timestamp) + hq->maxTime;
         }
-
       }
     }
   }
 
+  // release the lock if we have it
   if (locked)
     atomic_flag_clear(&hq->lock);
 
@@ -354,6 +350,7 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
   return LGMP_OK;
 }
 
+#include <stdio.h>
 LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
 {
   assert(queue);
@@ -368,7 +365,7 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
   if (!(LGMP_SUBS_ON(subs) & bit))
     return LGMP_ERR_QUEUE_UNSUBSCRIBED;
 
-  if (hq->position == queue->position)
+  if (atomic_load(&hq->position) == queue->position)
     return LGMP_ERR_QUEUE_EMPTY;
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
@@ -389,23 +386,19 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
 
     if (retry > 0)
     {
-      uint32_t start = atomic_load(&hq->start);
-
       // check if the host process loop has not already done this
-      if (start == queue->position)
+      if (hq->start == queue->position)
       {
         // message finished
-        if (++start == hq->numMessages)
-          start = 0;
+        if (++hq->start == hq->numMessages)
+          hq->start = 0;
 
         // decrement the count and update the timeout if needed
-        if (atomic_fetch_sub(&hq->count, 1) > 1)
-          atomic_store(&hq->msgTimeout,
-              atomic_load(&queue->header->timestamp) + hq->maxTime);
-
-        atomic_store(&hq->start, start);
+        if (--hq->count > 0)
+          hq->msgTimeout = atomic_load(&queue->header->timestamp) + hq->maxTime;
       }
 
+      // release the lock
       atomic_flag_clear(&hq->lock);
     }
   }

@@ -45,19 +45,19 @@ struct LGMPHeaderQueue
 {
   uint32_t queueID;
   uint32_t numMessages;
-  uint32_t newSubCount;
+  _Atomic(uint32_t) newSubCount;
   uint32_t maxTime;
 
-  uint32_t position;
+  _Atomic(uint32_t) position;
   uint32_t messagesOffset;
   uint64_t timeout[32];
 
   /* the lock MUST be held to use the following values */
-  uint32_t lock;
+  _Atomic(uint32_t) lock;
   uint64_t subs; // see LGMP_SUBS_* macros
   uint32_t start;
   uint64_t msgTimeout;
-  uint32_t count;
+  _Atomic(uint32_t) count;
 };
 
 struct LGMPHeader

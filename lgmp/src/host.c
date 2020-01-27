@@ -187,16 +187,16 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     while(atomic_flag_test_and_set(&hq->lock) && --timeout)
       usleep(1);
 
-    uint64_t      subs = atomic_load(&hq->subs);
+    uint64_t      subs = hq->subs;
     const uint64_t now = lgmpGetClockMS();
 
     for(;;)
     {
       struct LGMPHeaderMessage *msg = &messages[hq->start];
-      uint32_t pend = atomic_load(&msg->pendingSubs);
+      uint32_t pend = msg->pendingSubs;
 
       const uint32_t newBadSubs = pend & ~LGMP_SUBS_BAD(subs);
-      if (newBadSubs && now > atomic_load(&hq->msgTimeout))
+      if (newBadSubs && now > hq->msgTimeout)
       {
         // reset garbage collection timeout for new bad subs
         subs = LGMP_SUBS_OR_BAD(subs, newBadSubs);
@@ -206,7 +206,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
             hq->timeout[id] = timeout;
 
         // clear the pending subs
-        atomic_store(&msg->pendingSubs, 0);
+        msg->pendingSubs = 0;
         pend = 0;
       }
 
@@ -223,10 +223,10 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
         break;
 
       // update the timeout
-      atomic_store(&hq->msgTimeout, now + hq->maxTime);
+      hq->msgTimeout = now + hq->maxTime;
     }
 
-    atomic_store(&hq->subs, subs);
+    hq->subs = subs;
     atomic_flag_clear(&hq->lock);
   }
 
@@ -301,17 +301,25 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
 {
   struct LGMPHeaderQueue *hq = queue->hq;
 
+  while(atomic_flag_test_and_set(&hq->lock)) {};
+
   // get the subscribers
-  const uint64_t subs = atomic_load(&hq->subs);
+  const uint64_t subs = hq->subs;
   const uint32_t pend = LGMP_SUBS_ON(subs) & ~(LGMP_SUBS_BAD(subs));
 
   // if nobody has subscribed there is no point in posting the message
   if (!pend)
+  {
+    atomic_flag_clear(&hq->lock);
     return LGMP_OK;
+  }
 
   // we should never fully fill the buffer
   if (atomic_load(&queue->hq->count) == hq->numMessages - 1)
+  {
+    atomic_flag_clear(&hq->lock);
     return LGMP_ERR_QUEUE_FULL;
+  }
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
     (queue->host->mem + hq->messagesOffset);
@@ -324,14 +332,13 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
   msg->pendingSubs = pend;
 
   // increment the queue count, if it were zero update the msgTimeout
-  while(atomic_flag_test_and_set(&hq->lock)) {};
   if (atomic_fetch_add(&hq->count, 1) == 0)
     atomic_store(&hq->msgTimeout, lgmpGetClockMS() + hq->maxTime);
+
   atomic_flag_clear(&hq->lock);
 
   if (++queue->position == hq->numMessages)
     queue->position = 0;
-
   atomic_store(&hq->position, queue->position);
   return LGMP_OK;
 }
