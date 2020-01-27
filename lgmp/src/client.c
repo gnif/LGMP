@@ -339,17 +339,21 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
   {
     // if we are the last subscriber update the host queue position
     while(atomic_flag_test_and_set(&hq->lock)) {};
+    uint32_t start = atomic_load(&hq->start);
 
     // check if the host process loop has not already done this
-    if (hq->start == queue->position)
+    if (start == queue->position)
     {
       // message finished
-      if (++hq->start == hq->numMessages)
-        hq->start = 0;
+      if (++start == hq->numMessages)
+        start = 0;
 
       // decrement the count and update the timeout if needed
       if (atomic_fetch_sub(&hq->count, 1) > 1)
-        hq->msgTimeout = atomic_load(&queue->header->timestamp) + hq->maxTime;
+        atomic_store(&hq->msgTimeout,
+            atomic_load(&queue->header->timestamp) + hq->maxTime);
+
+      atomic_store(&hq->start, start);
     }
 
     atomic_flag_clear(&hq->lock);
