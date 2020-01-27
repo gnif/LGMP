@@ -33,6 +33,14 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #define LGMP_SUBS_CLEAR(x, cl)   ((x) & ~((cl) | ((uint64_t)(cl) << 32)))
 #define LGMP_SUBS_SET(x, st)     ((x) | ((uint64_t)(st) << 32))
 
+#define LGMP_QUEUE_LOCK(hq) \
+  while (atomic_flag_test_and_set_explicit(&hq->lock, memory_order_acquire)) { ; }
+#define LGMP_QUEUE_UNLOCK(hq) { \
+  atomic_thread_fence(memory_order_release); \
+  atomic_flag_clear_explicit(&hq->lock, memory_order_release); \
+}
+
+
 struct LGMPHeaderMessage
 {
   uint32_t udata;
@@ -53,7 +61,7 @@ struct LGMPHeaderQueue
   uint64_t timeout[32];
 
   /* the lock MUST be held to use the following values */
-  _Atomic(uint32_t) lock;
+  atomic_flag lock;
   _Atomic(uint64_t) subs; // see LGMP_SUBS_* macros
   uint32_t start;
   uint64_t msgTimeout;

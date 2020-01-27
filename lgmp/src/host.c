@@ -181,11 +181,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
       (host->mem + hq->messagesOffset);
 
-    // a crashed client can leave the lock in a locked state, so we assume if we
-    // timeout that this has happened and we assume the lock
-    int timeout = hq->msgTimeout * 1000;
-    while(atomic_flag_test_and_set(&hq->lock) && --timeout)
-      usleep(1);
+    LGMP_QUEUE_LOCK(hq);
 
     uint64_t      subs = atomic_load(&hq->subs);
     const uint64_t now = lgmpGetClockMS();
@@ -227,7 +223,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     }
 
     atomic_store(&hq->subs, subs);
-    atomic_flag_clear(&hq->lock);
+    LGMP_QUEUE_UNLOCK(hq);
   }
 
   return LGMP_OK;
@@ -301,7 +297,7 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
 {
   struct LGMPHeaderQueue *hq = queue->hq;
 
-  while(atomic_flag_test_and_set(&hq->lock)) {};
+  LGMP_QUEUE_LOCK(hq);
 
   // get the subscribers
   const uint64_t subs = atomic_load(&hq->subs);
@@ -310,14 +306,14 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
   // if nobody has subscribed there is no point in posting the message
   if (!pend)
   {
-    atomic_flag_clear(&hq->lock);
+    LGMP_QUEUE_UNLOCK(hq);
     return LGMP_OK;
   }
 
   // we should never fully fill the buffer
   if (atomic_load(&queue->hq->count) == hq->numMessages - 1)
   {
-    atomic_flag_clear(&hq->lock);
+    LGMP_QUEUE_UNLOCK(hq);
     return LGMP_ERR_QUEUE_FULL;
   }
 
@@ -340,6 +336,6 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
 
   atomic_store(&hq->position, queue->position);
 
-  atomic_flag_clear(&hq->lock);
+  LGMP_QUEUE_UNLOCK(hq);
   return LGMP_OK;
 }
