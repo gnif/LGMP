@@ -28,7 +28,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <unistd.h>
 #include <stdatomic.h>
 
-#define LGMP_HEARTBEAT_TIMEOUT 200
+#define LGMP_HEARTBEAT_TIMEOUT 2000
 
 struct LGMPClientQueue
 {
@@ -75,10 +75,17 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
     return LGMP_ERR_INVALID_VERSION;
 
 #ifndef LGMP_REALACY
-  // sleep for the timeout to see if the host is alive and updating the heartbeat
+  // check the host's timestamp is updating
   const uint64_t hosttime = atomic_load(&header->timestamp);
-  usleep(LGMP_HEARTBEAT_TIMEOUT * 1000);
-  if (atomic_load(&header->timestamp) == hosttime)
+  int to = LGMP_HEARTBEAT_TIMEOUT;
+  while(--to)
+  {
+    usleep(1000);
+    if (atomic_load(&header->timestamp) != hosttime)
+      break;
+  }
+
+  if (to < 0)
     return LGMP_ERR_INVALID_SESSION;
 #endif
 

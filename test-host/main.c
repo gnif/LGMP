@@ -64,7 +64,7 @@ int main(int argc, char * argv[])
   {
     .queueID     = 0,
     .numMessages = 10,
-    .subTimeout  = 150
+    .subTimeout  = 2000
   };
 
   PLGMPHostQueue queue;
@@ -95,24 +95,31 @@ int main(int argc, char * argv[])
   sprintf(lgmpHostMemPtr(mem[7]), "And now number 8");
   sprintf(lgmpHostMemPtr(mem[8]), "Second last buffer");
   sprintf(lgmpHostMemPtr(mem[9]), "It's over!");
+
+  uint32_t time = 0;
   uint32_t count = 0;
 
   while(true)
   {
+    ++time;
+
     if((status = lgmpHostQueuePost(queue, count, mem[count % 10])) != LGMP_ERR_QUEUE_FULL)
       ++count;
 
-    if (lgmpHostProcess(host) != LGMP_OK)
+    if (time % 1000 == 0)
     {
-      printf("lgmpHostQueuePost Failed: %s\n", lgmpStatusString(status));
-      break;
+      if (lgmpHostProcess(host) != LGMP_OK)
+      {
+        printf("lgmpHostQueuePost Failed: %s\n", lgmpStatusString(status));
+        break;
+      }
+
+      uint32_t newSubs;
+      if ((newSubs = lgmpHostQueueNewSubs(queue)) > 0)
+        printf("newSubs: %u\n", newSubs);
     }
 
-    uint32_t newSubs;
-    if ((newSubs = lgmpHostQueueNewSubs(queue)) > 0)
-      printf("newSubs: %u\n", newSubs);
-
-//    usleep(1);
+    usleep(1000);
   }
 
   for(int i = 0; i < 10; ++i)
