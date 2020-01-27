@@ -166,8 +166,6 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
   *result = &client->queues[queueIndex];
   PLGMPClientQueue q = *result;
 
-  q->header = client->header;
-
   // take the queue lock
   while(atomic_flag_test_and_set(&hq->lock)) {};
   uint64_t subs = atomic_load(&hq->subs);
@@ -203,6 +201,7 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
   atomic_flag_clear(&hq->lock);
   atomic_fetch_add(&hq->newSubCount, 1);
 
+  q->header   = client->header;
   q->client   = client;
   q->index    = queueIndex;
   q->id       = id;
