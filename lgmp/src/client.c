@@ -37,6 +37,7 @@ struct LGMPClientQueue
   unsigned int  index;
   uint32_t      position;
 
+  struct LGMPHeader      * header;
   struct LGMPHeaderQueue * hq;
 };
 
@@ -155,8 +156,10 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
   if (!hq)
     return LGMP_ERR_NO_SUCH_QUEUE;
 
-  *result      = &client->queues[queueIndex];
+  *result = &client->queues[queueIndex];
   PLGMPClientQueue q = *result;
+
+  q->header = client->header;
 
   // take the queue lock
   while(atomic_flag_test_and_set(&hq->lock)) {};
@@ -326,7 +329,25 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
   struct LGMPHeaderMessage *msg = &messages[queue->position];
 
   // turn off the pending bit for our queue
-  atomic_fetch_and(&msg->pendingSubs, ~bit);
+  if ((atomic_fetch_and(&msg->pendingSubs, ~bit) & ~bit) == 0)
+  {
+    // if we are the last subscriber update the host queue position
+    while(atomic_flag_test_and_set(&hq->lock)) {};
+
+    // check if the host process loop has not already done this
+    if (hq->start == queue->position)
+    {
+      // message finished
+      if (++hq->start == hq->numMessages)
+        hq->start = 0;
+
+      // decrement the count and update the timeout if needed
+      if (atomic_fetch_sub(&hq->count, 1) > 1)
+        hq->msgTimeout = atomic_load(&queue->header->timestamp) + hq->maxTime;
+    }
+
+    atomic_flag_clear(&hq->lock);
+  }
 
   if (++queue->position == hq->numMessages)
     queue->position = 0;
