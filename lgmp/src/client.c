@@ -27,6 +27,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdatomic.h>
+#include <stdio.h>
 
 #define LGMP_HEARTBEAT_TIMEOUT 2000
 
@@ -350,7 +351,6 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
   return LGMP_OK;
 }
 
-#include <stdio.h>
 LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
 {
   assert(queue);
@@ -394,8 +394,9 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
           hq->start = 0;
 
         // decrement the count and update the timeout if needed
-        if (--hq->count > 0)
-          hq->msgTimeout = atomic_load(&queue->header->timestamp) + hq->maxTime;
+        if (atomic_fetch_sub(&hq->count, 1) == 1)
+          hq->msgTimeout =
+            atomic_load(&queue->header->timestamp) + hq->maxTime;
       }
 
       // release the lock

@@ -54,7 +54,7 @@ struct LGMPHeaderQueue
 
   /* the lock MUST be held to use the following values */
   _Atomic(uint32_t) lock;
-  uint64_t subs; // see LGMP_SUBS_* macros
+  _Atomic(uint64_t) subs; // see LGMP_SUBS_* macros
   uint32_t start;
   uint64_t msgTimeout;
   _Atomic(uint32_t) count;

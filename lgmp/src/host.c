@@ -187,7 +187,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     while(atomic_flag_test_and_set(&hq->lock) && --timeout)
       usleep(1);
 
-    uint64_t      subs = hq->subs;
+    uint64_t      subs = atomic_load(&hq->subs);
     const uint64_t now = lgmpGetClockMS();
 
     for(;;)
@@ -226,7 +226,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
       hq->msgTimeout = now + hq->maxTime;
     }
 
-    hq->subs = subs;
+    atomic_store(&hq->subs, subs);
     atomic_flag_clear(&hq->lock);
   }
 
@@ -304,7 +304,7 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
   while(atomic_flag_test_and_set(&hq->lock)) {};
 
   // get the subscribers
-  const uint64_t subs = hq->subs;
+  const uint64_t subs = atomic_load(&hq->subs);
   const uint32_t pend = LGMP_SUBS_ON(subs) & ~(LGMP_SUBS_BAD(subs));
 
   // if nobody has subscribed there is no point in posting the message
@@ -335,10 +335,11 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
   if (atomic_fetch_add(&hq->count, 1) == 0)
     atomic_store(&hq->msgTimeout, lgmpGetClockMS() + hq->maxTime);
 
-  atomic_flag_clear(&hq->lock);
-
   if (++queue->position == hq->numMessages)
     queue->position = 0;
+
   atomic_store(&hq->position, queue->position);
+
+  atomic_flag_clear(&hq->lock);
   return LGMP_OK;
 }
