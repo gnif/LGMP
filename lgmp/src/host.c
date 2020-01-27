@@ -181,7 +181,12 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
       (host->mem + hq->messagesOffset);
 
-    while(atomic_flag_test_and_set(&hq->lock)) {};
+    // a crashed client can leave the lock in a locked state, so we assume if we
+    // timeout that this has happened and we assume the lock
+    int timeout = hq->msgTimeout * 1000;
+    while(atomic_flag_test_and_set(&hq->lock) && --timeout)
+      usleep(1);
+
     uint64_t      subs = atomic_load(&hq->subs);
     const uint64_t now = lgmpGetClockMS();
 
