@@ -266,7 +266,8 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
 
   uint32_t next = queue->position;
   uint32_t last;
-  bool locked = false;
+  bool cleanup = true;
+  bool locked  = false;
   while(true)
   {
     last = next;
@@ -280,25 +281,35 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
     struct LGMPHeaderMessage *msg = &messages[last];
 
     // turn off the pending bit for our queue
-    if ((atomic_fetch_and(&msg->pendingSubs, ~bit) & ~bit) == 0)
+    if (((atomic_fetch_and(&msg->pendingSubs, ~bit) & ~bit) == 0) && cleanup)
     {
       if (!locked)
       {
-        LGMP_QUEUE_LOCK(hq);
-        locked = true;
+        if (LGMP_QUEUE_TRY_LOCK(hq))
+          locked = true;
+        else
+        {
+          cleanup = false;
+          continue;
+        }
       }
 
-      // check if the host process loop has not already done this
-      if (hq->start == last)
+      // someone else may have done this before we got the lock, so check
+      if (hq->start != last)
       {
-        // message finished
-        hq->start = next;
-
-        // decrement the count and update the timeout if needed
-        if (atomic_fetch_sub(&hq->count, 1) == 1)
-          hq->msgTimeout =
-            atomic_load(&queue->header->timestamp) + hq->maxTime;
+        LGMP_QUEUE_UNLOCK(hq);
+        cleanup = false;
+        locked  = false;
+        continue;
       }
+
+      // message finished
+      hq->start = next;
+
+      // decrement the count and update the timeout if needed
+      if (atomic_fetch_sub(&hq->count, 1) == 1)
+        hq->msgTimeout =
+          atomic_load(&queue->header->timestamp) + hq->maxTime;
     }
   }
 
@@ -365,22 +376,26 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
   if ((atomic_fetch_and(&msg->pendingSubs, ~bit) & ~bit) == 0 &&
       LGMP_QUEUE_TRY_LOCK(hq))
   {
-    // check if the host process loop has not already done this
-    if (hq->start == queue->position)
+    // someone else may have done this before we got the lock, so check
+    if (hq->start != queue->position)
     {
-      // message finished
-      if (++hq->start == hq->numMessages)
-        hq->start = 0;
-
-      // decrement the count and update the timeout if needed
-      if (atomic_fetch_sub(&hq->count, 1) == 1)
-        hq->msgTimeout =
-          atomic_load(&queue->header->timestamp) + hq->maxTime;
+      LGMP_QUEUE_UNLOCK(hq);
+      goto done;
     }
+
+    // message finished
+    if (++hq->start == hq->numMessages)
+      hq->start = 0;
+
+    // decrement the count and update the timeout if needed
+    if (atomic_fetch_sub(&hq->count, 1) == 1)
+      hq->msgTimeout =
+        atomic_load(&queue->header->timestamp) + hq->maxTime;
 
     LGMP_QUEUE_UNLOCK(hq);
   }
 
+done:
   if (++queue->position == hq->numMessages)
     queue->position = 0;
 
