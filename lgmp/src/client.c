@@ -289,11 +289,10 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
       }
 
       // check if the host process loop has not already done this
-      if (hq->start == queue->position)
+      if (hq->start == last)
       {
         // message finished
-        if (++hq->start == hq->numMessages)
-          hq->start = 0;
+        hq->start = next;
 
         // decrement the count and update the timeout if needed
         if (atomic_fetch_sub(&hq->count, 1) == 1)
@@ -361,11 +360,11 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
     (queue->client->mem + hq->messagesOffset);
   struct LGMPHeaderMessage *msg = &messages[queue->position];
 
-  // turn off the pending bit for our queue
-  if ((atomic_fetch_and(&msg->pendingSubs, ~bit) & ~bit) == 0)
+  // turn off the pending bit for our queue and try to dequeue the message if
+  // it's finished.
+  if ((atomic_fetch_and(&msg->pendingSubs, ~bit) & ~bit) == 0 &&
+      LGMP_QUEUE_TRY_LOCK(hq))
   {
-    LGMP_QUEUE_LOCK(hq);
-
     // check if the host process loop has not already done this
     if (hq->start == queue->position)
     {
