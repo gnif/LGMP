@@ -306,16 +306,19 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
       // message finished
       hq->start = next;
 
-      // decrement the count and update the timeout if needed
-      if (atomic_fetch_sub(&hq->count, 1) == 1)
-        hq->msgTimeout =
-          atomic_load(&queue->header->timestamp) + hq->maxTime;
+      // decrement the count
+      atomic_fetch_sub(&hq->count, 1);
     }
   }
 
   // release the lock if we have it
   if (locked)
+  {
+    // update the timeout
+    hq->msgTimeout =
+      atomic_load(&queue->header->timestamp) + hq->maxTime;
     LGMP_QUEUE_UNLOCK(hq);
+  }
 
   queue->position = last;
   return LGMP_OK;
@@ -387,10 +390,10 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
     if (++hq->start == hq->numMessages)
       hq->start = 0;
 
-    // decrement the count and update the timeout if needed
-    if (atomic_fetch_sub(&hq->count, 1) == 1)
-      hq->msgTimeout =
-        atomic_load(&queue->header->timestamp) + hq->maxTime;
+    // decrement the count and update the timeout
+    atomic_fetch_sub(&hq->count, 1);
+    hq->msgTimeout =
+      atomic_load(&queue->header->timestamp) + hq->maxTime;
 
     LGMP_QUEUE_UNLOCK(hq);
   }
