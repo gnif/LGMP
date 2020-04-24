@@ -189,7 +189,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     for(;;)
     {
       struct LGMPHeaderMessage *msg = &messages[hq->start];
-      uint32_t pend = msg->pendingSubs;
+      uint32_t pend = msg->pendingSubs & LGMP_SUBS_ON(subs);
 
       const uint32_t newBadSubs = pend & ~LGMP_SUBS_BAD(subs);
       if (newBadSubs && now > hq->msgTimeout)
