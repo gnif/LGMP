@@ -86,7 +86,7 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result,
       break;
   }
 
-  if (to < 0)
+  if (to == 0)
     return LGMP_ERR_INVALID_SESSION;
 #endif
 
