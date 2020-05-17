@@ -31,7 +31,8 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 extern "C" {
 #endif
 
-LGMP_STATUS lgmpHostInit   (void *mem, const size_t size, PLGMPHost * result);
+LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result,
+    uint32_t udataSize, uint8_t * udata);
 void        lgmpHostFree   (PLGMPHost * host);
 LGMP_STATUS lgmpHostProcess(PLGMPHost host);
 

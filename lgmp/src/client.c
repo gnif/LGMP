@@ -53,7 +53,8 @@ struct LGMPClient
   struct LGMPClientQueue queues[LGMP_MAX_QUEUES];
 };
 
-LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
+LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result,
+    uint32_t * udataSize, uint8_t ** udata)
 {
   assert(mem);
   assert(size > 0);
@@ -99,6 +100,9 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
   client->sessionID     = header->sessionID;
   client->hosttime      = header->timestamp;
   client->lastHeartbeat = lgmpGetClockMS();
+
+  if (udataSize) *udataSize = header->udataSize;
+  if (udata    ) *udata     = (uint8_t*)&header->udata;
 
   memset(&client->queues, 0, sizeof(client->queues));
   return LGMP_OK;

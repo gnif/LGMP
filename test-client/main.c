@@ -32,7 +32,7 @@ void * ram;
 
 int main(int argc, char * argv[])
 {
-  unsigned int delay = 1000;
+  unsigned int delay = 50;
   if (argc > 1)
     delay = atoi(argv[1]) * 1000;
 
@@ -50,9 +50,12 @@ int main(int argc, char * argv[])
     goto out_close;
   }
 
-  PLGMPClient  client;
-  LGMP_STATUS  status;
-  while((status = lgmpClientInit(ram, RAM_SIZE, &client)) != LGMP_OK)
+  PLGMPClient client;
+  LGMP_STATUS status;
+  uint32_t   udataSize;
+  uint8_t  * udata;
+  while((status = lgmpClientInit(ram, RAM_SIZE, &client, &udataSize, &udata))
+      != LGMP_OK)
   {
     if (status == LGMP_ERR_INVALID_MAGIC)
       usleep(250000);

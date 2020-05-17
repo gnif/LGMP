@@ -24,7 +24,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <stdatomic.h>
 
 #define LGMP_PROTOCOL_MAGIC   0x504d474c
-#define LGMP_PROTOCOL_VERSION 1
+#define LGMP_PROTOCOL_VERSION 2
 #define LGMP_MAX_QUEUES       5
 
 #define LGMP_SUBS_ON(x)          (uint32_t)((x) >> 32)
@@ -75,9 +75,10 @@ struct LGMPHeader
   uint32_t version;
   uint32_t sessionID;
   uint64_t timestamp;
-  uint32_t caps;
   uint32_t numQueues;
   struct LGMPHeaderQueue queues[LGMP_MAX_QUEUES];
+  uint32_t udataSize;
+  uint8_t  udata[0];
 };
 
 #endif

@@ -23,6 +23,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <sys/types.h>
+#include <string.h>
 
 #include "lgmp/host.h"
 
@@ -54,7 +55,12 @@ int main(int argc, char * argv[])
 
   PLGMPHost host;
   LGMP_STATUS status;
-  if ((status = lgmpHostInit(ram, RAM_SIZE, &host)) != LGMP_OK)
+
+  uint8_t udata[32];
+  memset(udata, 0xaa, sizeof(udata));
+
+  if ((status = lgmpHostInit(ram, RAM_SIZE, &host, sizeof(udata), udata))
+      != LGMP_OK)
   {
     printf("lgmpHostInit failed: %s\n", lgmpStatusString(status));
     goto out_unmap;
@@ -64,7 +70,7 @@ int main(int argc, char * argv[])
   {
     .queueID     = 0,
     .numMessages = 10,
-    .subTimeout  = 2000
+    .subTimeout  = 100
   };
 
   PLGMPHostQueue queue;

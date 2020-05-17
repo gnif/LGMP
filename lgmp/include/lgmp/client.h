@@ -31,7 +31,8 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 extern "C" {
 #endif
 
-LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result);
+LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result,
+    uint32_t * udataSize, uint8_t ** udata);
 void        lgmpClientFree(PLGMPClient * client);
 bool        lgmpClientSessionValid(PLGMPClient client);
 

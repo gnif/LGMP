@@ -8,7 +8,11 @@ public:
   bool initHost(void * mem, const size_t memSize)
   {
     LGMP_STATUS status;
-    if ((status = lgmpHostInit(mem, memSize, &m_host)) != LGMP_OK)
+
+    uint8_t data[32];
+    memset(data, 0xaa, sizeof(data));
+    if ((status = lgmpHostInit(mem, memSize, &m_host, sizeof(data), data))
+        != LGMP_OK)
     {
       printf("lgmpHostInit: %s\n", lgmpStatusString(status));
       return false;
@@ -39,7 +43,12 @@ public:
   bool initClient(void * mem, const size_t memSize)
   {
     LGMP_STATUS status;
-    if((status = lgmpClientInit(mem, memSize, &m_client)) != LGMP_OK)
+
+    uint32_t dataSize;
+    uint8_t * data;
+
+    if((status = lgmpClientInit(mem, memSize, &m_client, &dataSize, &data))
+        != LGMP_OK)
     {
       printf("lgmpClientInit: %s\n", lgmpStatusString(status));
       return false;

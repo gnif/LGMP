@@ -51,7 +51,8 @@ struct LGMPHost
   struct LGMPHostQueue   queues[LGMP_MAX_QUEUES];
 };
 
-LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result)
+LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result,
+    uint32_t udataSize, uint8_t * udata)
 {
   assert(mem);
   assert(size > 0);
@@ -63,7 +64,7 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result)
   if (!lgmpGetClockMS())
     return LGMP_ERR_CLOCK_FAILURE;
 
-  if (size < sizeof(struct LGMPHeader))
+  if (size < sizeof(struct LGMPHeader) + udataSize)
     return LGMP_ERR_INVALID_SIZE;
 
   *result = malloc(sizeof(struct LGMPHost));
@@ -74,8 +75,8 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result)
 
   host->mem      = mem;
   host->size     = size;
-  host->avail    = size - sizeof(struct LGMPHeader);
-  host->nextFree = sizeof(struct LGMPHeader);
+  host->avail    = size - sizeof(struct LGMPHeader) - udataSize;
+  host->nextFree = sizeof(struct LGMPHeader) + udataSize;
   host->header   = (struct LGMPHeader *)mem;
   host->started  = false;
 
@@ -88,8 +89,9 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result)
   host->header->magic     = LGMP_PROTOCOL_MAGIC;
   host->header->timestamp = lgmpGetClockMS();
   host->header->version   = LGMP_PROTOCOL_VERSION;
-  host->header->caps      = 0;
   host->header->numQueues = 0;
+  host->header->udataSize = udataSize;
+  memcpy(host->header->udata, udata, udataSize);
 
   return LGMP_OK;
 }
