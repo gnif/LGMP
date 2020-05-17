@@ -28,7 +28,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <unistd.h>
 #include <stdatomic.h>
 
-#define LGMP_HEARTBEAT_TIMEOUT 2000
+#define LGMP_HEARTBEAT_TIMEOUT 1000
 
 struct LGMPClientQueue
 {
