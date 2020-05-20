@@ -53,8 +53,7 @@ struct LGMPClient
   struct LGMPClientQueue queues[LGMP_MAX_QUEUES];
 };
 
-LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result,
-    uint32_t * udataSize, uint8_t ** udata)
+LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
 {
   assert(mem);
   assert(size > 0);
@@ -69,26 +68,6 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result,
     return LGMP_ERR_CLOCK_FAILURE;
 
   struct LGMPHeader *header = (struct LGMPHeader*)mem;
-  if (header->magic != LGMP_PROTOCOL_MAGIC)
-    return LGMP_ERR_INVALID_MAGIC;
-
-  if (header->version != LGMP_PROTOCOL_VERSION)
-    return LGMP_ERR_INVALID_VERSION;
-
-#ifndef LGMP_REALACY
-  // check the host's timestamp is updating
-  const uint64_t hosttime = atomic_load(&header->timestamp);
-  int to = LGMP_HEARTBEAT_TIMEOUT;
-  while(--to)
-  {
-    usleep(1000);
-    if (atomic_load(&header->timestamp) != hosttime)
-      break;
-  }
-
-  if (to == 0)
-    return LGMP_ERR_INVALID_SESSION;
-#endif
 
   *result = malloc(sizeof(struct LGMPClient));
   if (!*result)
@@ -97,14 +76,7 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result,
   PLGMPClient client = *result;
   client->mem           = (uint8_t*)mem;
   client->header        = header;
-  client->sessionID     = header->sessionID;
-  client->hosttime      = header->timestamp;
-  client->lastHeartbeat = lgmpGetClockMS();
-
-  if (udataSize) *udataSize = header->udataSize;
-  if (udata    ) *udata     = (uint8_t*)&header->udata;
-
-  memset(&client->queues, 0, sizeof(client->queues));
+  client->hosttime      = atomic_load(&header->timestamp);
   return LGMP_OK;
 }
 
@@ -116,6 +88,35 @@ void lgmpClientFree(PLGMPClient * client)
 
   free(*client);
   *client = NULL;
+}
+
+LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
+    uint8_t ** udata)
+{
+  assert(client);
+  struct LGMPHeader * header = client->header;
+
+  if (header->magic != LGMP_PROTOCOL_MAGIC)
+    return LGMP_ERR_INVALID_MAGIC;
+
+  if (header->version != LGMP_PROTOCOL_VERSION)
+    return LGMP_ERR_INVALID_VERSION;
+
+#ifndef LGMP_REALACY
+  // check the host's timestamp is updating
+  if (atomic_load(&header->timestamp) == client->hosttime)
+    return LGMP_ERR_INVALID_SESSION;
+#endif
+
+  client->sessionID     = header->sessionID;
+  client->hosttime      = header->timestamp;
+  client->lastHeartbeat = lgmpGetClockMS();
+
+  if (udataSize) *udataSize = header->udataSize;
+  if (udata    ) *udata     = (uint8_t*)&header->udata;
+
+  memset(&client->queues, 0, sizeof(client->queues));
+  return LGMP_OK;
 }
 
 bool lgmpClientSessionValid(PLGMPClient client)

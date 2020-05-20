@@ -47,10 +47,17 @@ public:
     uint32_t dataSize;
     uint8_t * data;
 
-    if((status = lgmpClientInit(mem, memSize, &m_client, &dataSize, &data))
+    if((status = lgmpClientInit(mem, memSize, &m_client))
         != LGMP_OK)
     {
       printf("lgmpClientInit: %s\n", lgmpStatusString(status));
+      return false;
+    }
+
+    if((status = lgmpClientSessionInit(m_client, &dataSize, &data))
+        != LGMP_OK)
+    {
+      printf("lgmpClientSessionInit: %s\n", lgmpStatusString(status));
       return false;
     }
 

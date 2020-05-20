@@ -52,18 +52,19 @@ int main(int argc, char * argv[])
 
   PLGMPClient client;
   LGMP_STATUS status;
-  uint32_t   udataSize;
-  uint8_t  * udata;
-  while((status = lgmpClientInit(ram, RAM_SIZE, &client, &udataSize, &udata))
+  while((status = lgmpClientInit(ram, RAM_SIZE, &client))
       != LGMP_OK)
   {
-    if (status == LGMP_ERR_INVALID_MAGIC)
-      usleep(250000);
-    else
-    {
-      printf("lgmpClientInit %s\n", lgmpStatusString(status));
-      goto out_unmap;
-    }
+    printf("lgmpClientInit %s\n", lgmpStatusString(status));
+    goto out_unmap;
+  }
+
+  uint32_t   udataSize;
+  uint8_t  * udata;
+  while((status = lgmpClientSessionInit(client, &udataSize, &udata)) != LGMP_OK)
+  {
+    usleep(100000);
+    printf("lgmpClientSessionInit: %s\n", lgmpStatusString(status));
   }
 
   PLGMPClientQueue queue;
