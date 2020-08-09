@@ -320,8 +320,8 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
   if (locked)
   {
     // update the timeout
-    hq->msgTimeout =
-      atomic_load(&queue->header->timestamp) + hq->maxTime;
+    atomic_store(&hq->msgTimeout,
+        atomic_load(&queue->header->timestamp) + hq->maxTime);
     LGMP_QUEUE_UNLOCK(hq);
   }
 
@@ -397,8 +397,8 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
 
     // decrement the count and update the timeout
     atomic_fetch_sub(&hq->count, 1);
-    hq->msgTimeout =
-      atomic_load(&queue->header->timestamp) + hq->maxTime;
+    atomic_store(&hq->msgTimeout,
+      atomic_load(&queue->header->timestamp) + hq->maxTime);
 
     LGMP_QUEUE_UNLOCK(hq);
   }

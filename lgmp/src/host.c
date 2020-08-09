@@ -138,7 +138,7 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   hq->position       = 0;
   hq->messagesOffset = host->nextFree;
   hq->start          = 0;
-  hq->msgTimeout     = 0;
+  atomic_store(&hq->msgTimeout, 0);
   hq->maxTime        = config.subTimeout;
   hq->count          = 0;
 
@@ -194,7 +194,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
       uint32_t pend = msg->pendingSubs & LGMP_SUBS_ON(subs);
 
       const uint32_t newBadSubs = pend & ~LGMP_SUBS_BAD(subs);
-      if (newBadSubs && now > hq->msgTimeout)
+      if (newBadSubs && now > atomic_load(&hq->msgTimeout))
       {
         // reset garbage collection timeout for new bad subs
         subs = LGMP_SUBS_OR_BAD(subs, newBadSubs);
@@ -221,7 +221,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
         break;
 
       // update the timeout
-      hq->msgTimeout = now + hq->maxTime;
+      atomic_store(&hq->msgTimeout, now + hq->maxTime);
     }
 
     atomic_store(&hq->subs, subs);

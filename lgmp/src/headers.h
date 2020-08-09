@@ -65,7 +65,7 @@ struct LGMPHeaderQueue
   atomic_flag lock;
   _Atomic(uint64_t) subs; // see LGMP_SUBS_* macros
   uint32_t start;
-  uint64_t msgTimeout;
+  _Atomic(uint64_t) msgTimeout;
   _Atomic(uint32_t) count;
 };
 
