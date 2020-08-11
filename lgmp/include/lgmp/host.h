@@ -45,6 +45,7 @@ struct LGMPQueueConfig
 
 LGMP_STATUS lgmpHostQueueNew    (PLGMPHost host,
     const struct LGMPQueueConfig config, PLGMPHostQueue * result);
+bool        lgmpHostQueueHasSubs(PLGMPHostQueue queue);
 uint32_t    lgmpHostQueueNewSubs(PLGMPHostQueue queue);
 uint32_t    lgmpHostQueuePending(PLGMPHostQueue queue);
 LGMP_STATUS lgmpHostQueuePost   (PLGMPHostQueue queue, uint32_t udata,

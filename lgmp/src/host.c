@@ -153,6 +153,12 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   return LGMP_OK;
 }
 
+bool lgmpHostQueueHasSubs(PLGMPHostQueue queue)
+{
+  assert(queue);
+  return LGMP_SUBS_ON(atomic_load(&queue->hq->subs)) != 0;
+}
+
 uint32_t lgmpHostQueueNewSubs(PLGMPHostQueue queue)
 {
   assert(queue);
