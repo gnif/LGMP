@@ -260,7 +260,12 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
   if (!(LGMP_SUBS_ON(subs) & bit))
-    return LGMP_ERR_QUEUE_UNSUBSCRIBED;
+  {
+    if (lgmpClientSessionValid(queue->client))
+      return LGMP_ERR_QUEUE_UNSUBSCRIBED;
+    else
+      return LGMP_ERR_INVALID_SESSION;
+  }
 
   uint32_t end = atomic_load(&hq->position);
   if (end == queue->position)
@@ -342,7 +347,12 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
   if (!(LGMP_SUBS_ON(subs) & bit))
-    return LGMP_ERR_QUEUE_UNSUBSCRIBED;
+  {
+    if (lgmpClientSessionValid(queue->client))
+      return LGMP_ERR_QUEUE_UNSUBSCRIBED;
+    else
+      return LGMP_ERR_INVALID_SESSION;
+  }
 
   if (atomic_load(&hq->position) == queue->position)
     return LGMP_ERR_QUEUE_EMPTY;
@@ -370,7 +380,12 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
   if (!(LGMP_SUBS_ON(subs) & bit))
-    return LGMP_ERR_QUEUE_UNSUBSCRIBED;
+  {
+    if (lgmpClientSessionValid(queue->client))
+      return LGMP_ERR_QUEUE_UNSUBSCRIBED;
+    else
+      return LGMP_ERR_INVALID_SESSION;
+  }
 
   if (atomic_load(&hq->position) == queue->position)
     return LGMP_ERR_QUEUE_EMPTY;
