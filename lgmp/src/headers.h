@@ -74,7 +74,7 @@ struct LGMPHeader
   uint32_t magic;
   uint32_t version;
   uint32_t sessionID;
-  uint64_t timestamp;
+  _Atomic(uint64_t) timestamp;
   uint32_t numQueues;
   struct LGMPHeaderQueue queues[LGMP_MAX_QUEUES];
   uint32_t udataSize;

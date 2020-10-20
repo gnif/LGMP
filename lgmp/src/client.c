@@ -102,14 +102,15 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
   if (header->version != LGMP_PROTOCOL_VERSION)
     return LGMP_ERR_INVALID_VERSION;
 
+  uint64_t timestamp = atomic_load(&header->timestamp);
 #ifndef LGMP_REALACY
   // check the host's timestamp is updating
-  if (atomic_load(&header->timestamp) == client->hosttime)
+  if (timestamp == client->hosttime)
     return LGMP_ERR_INVALID_SESSION;
 #endif
 
   client->sessionID     = header->sessionID;
-  client->hosttime      = header->timestamp;
+  client->hosttime      = timestamp;
   client->lastHeartbeat = lgmpGetClockMS();
 
   if (udataSize) *udataSize = header->udataSize;
