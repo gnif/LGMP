@@ -47,7 +47,7 @@ struct LGMPHeaderMessage
   uint32_t udata;
   uint32_t size;
   uint32_t offset;
-  uint32_t pendingSubs;
+  _Atomic(uint32_t) pendingSubs;
 };
 
 struct LGMPHeaderQueue
