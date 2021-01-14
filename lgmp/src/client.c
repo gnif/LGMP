@@ -184,8 +184,8 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
     uint32_t reap = 0;
     for(unsigned int id = 0; id < 32; ++id)
     {
-      if ((LGMP_SUBS_BAD(subs) & (1 << id)) && hosttime > hq->timeout[id])
-        reap |= (1 << id);
+      if ((LGMP_SUBS_BAD(subs) & (1U << id)) && hosttime > hq->timeout[id])
+        reap |= (1U << id);
     }
     subs = LGMP_SUBS_CLEAR(subs, reap);
   }
