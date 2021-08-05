@@ -112,7 +112,7 @@ int main(int argc, char * argv[])
     if((status = lgmpHostQueuePost(queue, count, mem[count % 10])) != LGMP_ERR_QUEUE_FULL)
       ++count;
 
-    if (time % 1000 == 0)
+    if (time % 100 == 0)
     {
       if (lgmpHostProcess(host) != LGMP_OK)
       {
