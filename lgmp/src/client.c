@@ -426,7 +426,7 @@ done:
   return LGMP_OK;
 }
 
-LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, void * data,
+LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, const void * data,
     size_t size)
 {
   struct LGMPHeaderQueue *hq = queue->hq;

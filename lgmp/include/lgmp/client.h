@@ -54,7 +54,7 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result);
 LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue);
 
 // send data to the host of up to LGMP_MSGS_SIZE in size
-LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, void * data,
+LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, const void * data,
     size_t size);
 
 #ifdef __cplusplus
