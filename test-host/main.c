@@ -120,6 +120,17 @@ int main(int argc, char * argv[])
         break;
       }
 
+      uint8_t buffer[LGMP_MSGS_SIZE];
+      size_t size;
+      while((status = lgmpHostReadData(queue, buffer, &size)) == LGMP_OK)
+        printf("Read a client message of %d in size\n", size);
+
+      if (status != LGMP_ERR_QUEUE_EMPTY)
+      {
+        printf("lgmpHostReadData Failed: %s\n", lgmpStatusString(status));
+        break;
+      }
+
       uint32_t newSubs;
       if ((newSubs = lgmpHostQueueNewSubs(queue)) > 0)
         printf("newSubs: %u\n", newSubs);

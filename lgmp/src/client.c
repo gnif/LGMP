@@ -425,3 +425,47 @@ done:
 
   return LGMP_OK;
 }
+
+LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, void * data,
+    size_t size)
+{
+  struct LGMPHeaderQueue *hq = queue->hq;
+  const uint32_t bit = 1U << queue->id;
+  const uint64_t subs = atomic_load(&hq->subs);
+
+  if (size > LGMP_MSGS_SIZE)
+    return LGMP_ERR_INVALID_SIZE;
+
+  if (LGMP_SUBS_BAD(subs) & bit)
+    return LGMP_ERR_QUEUE_TIMEOUT;
+
+  // if there is no room, just return
+  if (atomic_load(&hq->cMsgAvail) == 0)
+    return LGMP_ERR_QUEUE_FULL;
+
+  // lock the client message buffer
+  LGMP_LOCK(hq->cMsgLock);
+
+  // if there is now now room, unlock and return
+  if (atomic_load(&hq->cMsgAvail) == 0)
+  {
+    LGMP_UNLOCK(hq->cMsgLock);
+    return LGMP_ERR_QUEUE_FULL;
+  }
+
+  // get the write position and copy in the data
+  uint32_t wpos = atomic_load(&hq->cMsgWPos);
+  hq->cMsgs[wpos].size = size;
+  memcpy(hq->cMsgs[wpos].data, data, size);
+
+  // advance the write pointer and decrement the available count
+  if (wpos++ == LGMP_MSGS_MAX)
+    wpos = 0;
+  atomic_store(&hq->cMsgWPos, wpos);
+  atomic_fetch_sub(&hq->cMsgAvail, 1);
+
+  // unlock the client message buffer
+  LGMP_UNLOCK(hq->cMsgLock);
+
+  return LGMP_OK;
+};

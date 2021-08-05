@@ -79,6 +79,23 @@ int main(int argc, char * argv[])
     }
   }
 
+  uint8_t data[32];
+  for(int i = 0; i < 20; ++i)
+  {
+    printf("Sending %d\n", i);
+    if ((status = lgmpClientSendData(queue, data, sizeof(data))) != LGMP_OK)
+    {
+      if (status == LGMP_ERR_QUEUE_FULL)
+      {
+        --i;
+        continue;
+      }
+
+      printf("lgmpClientSendData: %s\n", lgmpStatusString(status));
+      goto out_lgmpclient;
+    }
+  }
+
   uint32_t lastCount = 0;
   while(lgmpClientSessionValid(client))
   {

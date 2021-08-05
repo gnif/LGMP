@@ -35,6 +35,7 @@ struct LGMPHostQueue
   PLGMPHost    host;
   unsigned int index;
   uint32_t     position;
+  uint32_t     cMsgPos;
 
   struct LGMPHeaderQueue * hq;
 };
@@ -141,6 +142,10 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   atomic_store(&hq->msgTimeout, 0);
   hq->maxTime        = config.subTimeout;
   hq->count          = 0;
+
+  atomic_flag_clear(&hq->cMsgLock);
+  atomic_store(&hq->cMsgAvail, LGMP_MSGS_MAX);
+  atomic_store(&hq->cMsgWPos, 0);
 
   queue->host       = host;
   queue->index      = host->header->numQueues;
@@ -345,5 +350,27 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
   atomic_store(&hq->position, queue->position);
 
   LGMP_QUEUE_UNLOCK(hq);
+  return LGMP_OK;
+}
+
+LGMP_STATUS lgmpHostReadData(PLGMPHostQueue queue, void * data, size_t * size)
+{
+  struct LGMPHeaderQueue *hq = queue->hq;
+
+  if (atomic_load(&hq->cMsgAvail) == LGMP_MSGS_MAX)
+    return LGMP_ERR_QUEUE_EMPTY;
+
+  // lock the client message buffer
+  LGMP_LOCK(hq->cMsgLock);
+
+  struct LGMPClientMessage * msg = &hq->cMsgs[queue->cMsgPos];
+  if (queue->cMsgPos++ == LGMP_MSGS_MAX)
+    queue->cMsgPos = 0;
+
+  memcpy(data, msg->data, msg->size);
+  *size = msg->size;
+
+  atomic_fetch_add(&hq->cMsgAvail, 1);
+  LGMP_UNLOCK(hq->cMsgLock);
   return LGMP_OK;
 }

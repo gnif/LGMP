@@ -23,9 +23,14 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <stdint.h>
 #include <stdatomic.h>
 
+#include "lgmp.h"
+
 #define LGMP_PROTOCOL_MAGIC   0x504d474c
-#define LGMP_PROTOCOL_VERSION 2
+#define LGMP_PROTOCOL_VERSION 3
 #define LGMP_MAX_QUEUES       5
+
+// maximum number of client messages supported
+#define LGMP_MSGS_MAX  10
 
 #define LGMP_SUBS_ON(x)          (uint32_t)((x) >> 32)
 #define LGMP_SUBS_BAD(x)         (uint32_t)((x) >>  0)
@@ -33,14 +38,18 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #define LGMP_SUBS_CLEAR(x, cl)   ((x) & ~((cl) | ((uint64_t)(cl) << 32)))
 #define LGMP_SUBS_SET(x, st)     ((x) | ((uint64_t)(st) << 32))
 
-#define LGMP_QUEUE_LOCK(hq) \
-  while (atomic_flag_test_and_set_explicit(&hq->lock, memory_order_acquire)) { ; }
+#define LGMP_LOCK(lock) \
+  while (atomic_flag_test_and_set_explicit(&(lock), memory_order_acquire)) { ; }
 
-#define LGMP_QUEUE_TRY_LOCK(hq) \
-  (!atomic_flag_test_and_set_explicit(&hq->lock, memory_order_acquire))
+#define LGMP_TRY_LOCK(lock) \
+  (!atomic_flag_test_and_set_explicit(&(lock), memory_order_acquire))
 
-#define LGMP_QUEUE_UNLOCK(hq) \
-  atomic_flag_clear_explicit(&hq->lock, memory_order_release);
+#define LGMP_UNLOCK(lock) \
+  atomic_flag_clear_explicit(&(lock), memory_order_release);
+
+#define LGMP_QUEUE_LOCK(hq) LGMP_LOCK(hq->lock)
+#define LGMP_QUEUE_TRY_LOCK(hq) LGMP_TRY_LOCK(hq->lock)
+#define LGMP_QUEUE_UNLOCK(hq) LGMP_UNLOCK(hq->lock)
 
 struct LGMPHeaderMessage
 {
@@ -48,6 +57,12 @@ struct LGMPHeaderMessage
   uint32_t size;
   uint32_t offset;
   _Atomic(uint32_t) pendingSubs;
+};
+
+struct LGMPClientMessage
+{
+  uint32_t size;
+  uint8_t  data[LGMP_MSGS_SIZE];
 };
 
 struct LGMPHeaderQueue
@@ -67,6 +82,12 @@ struct LGMPHeaderQueue
   uint32_t start;
   _Atomic(uint64_t) msgTimeout;
   _Atomic(uint32_t) count;
+
+  /* messages submitted from the client */
+  atomic_flag cMsgLock;
+  _Atomic(uint32_t) cMsgAvail;
+  _Atomic(uint32_t) cMsgWPos;
+  struct LGMPClientMessage cMsgs[LGMP_MSGS_MAX];
 };
 
 struct LGMPHeader

@@ -20,6 +20,9 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #ifndef LGMP_LGMP_H
 #define LGMP_LGMP_H
 
+// this MUST match the size defined in `src/headers.h`
+#define LGMP_MSGS_SIZE 64
+
 #ifdef __cplusplus
 extern "C" {
 #endif

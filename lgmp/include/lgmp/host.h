@@ -50,6 +50,7 @@ uint32_t    lgmpHostQueueNewSubs(PLGMPHostQueue queue);
 uint32_t    lgmpHostQueuePending(PLGMPHostQueue queue);
 LGMP_STATUS lgmpHostQueuePost   (PLGMPHostQueue queue, uint32_t udata,
     PLGMPMemory payload);
+LGMP_STATUS lgmpHostReadData(PLGMPHostQueue queue, void * data, size_t * size);
 
 /**
  * Allocates some RAM for application use from the shared memory
