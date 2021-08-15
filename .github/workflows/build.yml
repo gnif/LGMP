@@ -1,0 +1,57 @@
+name: build
+on: [push, pull_request]
+jobs:
+  lgmp:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+        build_type: [Release, Debug]
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        submodules: recursive
+    - name: Configure LGMP
+      env:
+        CC: /usr/bin/${{ matrix.cc }}
+      run: |
+        mkdir lgmp/build
+        cd lgmp/build
+        cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} ..
+    - name: Build LGMP
+      run: |
+        cd lgmp/build
+        make -j$(nproc)
+
+  relacy-test:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - {cc: gcc, cxx: g++}
+          - {cc: clang, cxx: clang++}
+        build_type: [Release, Debug]
+        exclude:
+          # This test somehow fails with "longjmp causes uninitialized stack frame"
+          - compiler: {cc: gcc, cxx: g++}
+            build_type: Release
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        submodules: recursive
+    - name: Configure relacy-test
+      env:
+        CC: /usr/bin/${{ matrix.compiler.cc }}
+        CXX: /usr/bin/${{ matrix.compiler.cxx }}
+      run: |
+        mkdir relacy-test/build
+        cd relacy-test/build
+        cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} ..
+    - name: Build relacy-test
+      run: |
+        cd relacy-test/build
+        make -j$(nproc)
+    - name: Run relacy-test
+      run: relacy-test/build/relacy-test
