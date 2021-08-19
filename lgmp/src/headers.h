@@ -26,7 +26,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include "lgmp.h"
 
 #define LGMP_PROTOCOL_MAGIC   0x504d474c
-#define LGMP_PROTOCOL_VERSION 3
+#define LGMP_PROTOCOL_VERSION 4
 #define LGMP_MAX_QUEUES       5
 
 // maximum number of client messages supported
@@ -87,6 +87,8 @@ struct LGMPHeaderQueue
   atomic_flag cMsgLock;
   _Atomic(uint32_t) cMsgAvail;
   _Atomic(uint32_t) cMsgWPos;
+  _Atomic(uint32_t) cMsgWSerial;
+  _Atomic(uint32_t) cMsgRSerial;
   struct LGMPClientMessage cMsgs[LGMP_MSGS_MAX];
 };
 

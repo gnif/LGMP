@@ -79,11 +79,13 @@ int main(int argc, char * argv[])
     }
   }
 
+  uint32_t serial;
+  bool dataDone = false;
+
   uint8_t data[32];
   for(int i = 0; i < 20; ++i)
   {
-    printf("Sending %d\n", i);
-    if ((status = lgmpClientSendData(queue, data, sizeof(data))) != LGMP_OK)
+    if ((status = lgmpClientSendData(queue, data, sizeof(data), &serial)) != LGMP_OK)
     {
       if (status == LGMP_ERR_QUEUE_FULL)
       {
@@ -135,6 +137,19 @@ int main(int argc, char * argv[])
     status = lgmpClientMessageDone(queue);
     if (status != LGMP_OK)
       printf("lgmpClientMessageDone: %s\n", lgmpStatusString(status));
+
+    if (!dataDone)
+    {
+      uint32_t hostSerial;
+      lgmpClientGetSerial(queue, &hostSerial);
+      printf("serial %d - hostSerial %d\n", serial, hostSerial);
+      if (hostSerial >= serial)
+      {
+        dataDone = true;
+        printf("data done\n");
+        goto out_unsub;
+      }
+    }
   }
 
   printf("Shutdown\n");

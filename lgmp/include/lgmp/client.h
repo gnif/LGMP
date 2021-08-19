@@ -54,8 +54,13 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result);
 LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue);
 
 // send data to the host of up to LGMP_MSGS_SIZE in size
+// serial is set to the seral number of the message just added if successful
 LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, const void * data,
-    size_t size);
+    size_t size, uint32_t * serial);
+
+// get the last serial processed by the host
+// this can be used to determine if data messages have been processed by the host
+LGMP_STATUS lgmpClientGetSerial(PLGMPClientQueue queue, uint32_t * serial);
 
 #ifdef __cplusplus
 }

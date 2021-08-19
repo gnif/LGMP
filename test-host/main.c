@@ -104,6 +104,7 @@ int main(int argc, char * argv[])
 
   uint32_t time = 0;
   uint32_t count = 0;
+  int pendingAck = 0;
 
   while(true)
   {
@@ -123,7 +124,10 @@ int main(int argc, char * argv[])
       uint8_t buffer[LGMP_MSGS_SIZE];
       size_t size;
       while((status = lgmpHostReadData(queue, buffer, &size)) == LGMP_OK)
+      {
         printf("Read a client message of %d in size\n", size);
+        ++pendingAck;
+      }
 
       if (status != LGMP_ERR_QUEUE_EMPTY)
       {
@@ -134,6 +138,12 @@ int main(int argc, char * argv[])
       uint32_t newSubs;
       if ((newSubs = lgmpHostQueueNewSubs(queue)) > 0)
         printf("newSubs: %u\n", newSubs);
+    }
+
+    if(pendingAck)
+    {
+      --pendingAck;
+      lgmpHostAckData(queue);
     }
 
     usleep(1000);

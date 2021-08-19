@@ -427,7 +427,7 @@ done:
 }
 
 LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, const void * data,
-    size_t size)
+    size_t size, uint32_t * serial)
 {
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
@@ -464,8 +464,28 @@ LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, const void * data,
   atomic_store(&hq->cMsgWPos, wpos);
   atomic_fetch_sub(&hq->cMsgAvail, 1);
 
+  // increment the write serial
+  uint32_t tmp = atomic_fetch_add(&hq->cMsgWSerial, 1);
+
   // unlock the client message buffer
   LGMP_UNLOCK(hq->cMsgLock);
 
+  // return the message serial if it's wanted
+  if (serial)
+    *serial = tmp + 1;
+
   return LGMP_OK;
 };
+
+LGMP_STATUS lgmpClientGetSerial(PLGMPClientQueue queue, uint32_t * serial)
+{
+  struct LGMPHeaderQueue *hq = queue->hq;
+  const uint32_t bit = 1U << queue->id;
+  const uint64_t subs = atomic_load(&hq->subs);
+
+  if (LGMP_SUBS_BAD(subs) & bit)
+    return LGMP_ERR_QUEUE_TIMEOUT;
+
+  *serial = atomic_load(&hq->cMsgRSerial);
+  return LGMP_OK;
+}

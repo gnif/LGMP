@@ -144,8 +144,10 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   hq->count          = 0;
 
   atomic_flag_clear(&hq->cMsgLock);
-  atomic_store(&hq->cMsgAvail, LGMP_MSGS_MAX);
-  atomic_store(&hq->cMsgWPos, 0);
+  atomic_store(&hq->cMsgAvail  , LGMP_MSGS_MAX);
+  atomic_store(&hq->cMsgWPos   , 0);
+  atomic_store(&hq->cMsgWSerial, 0);
+  atomic_store(&hq->cMsgRSerial, 0);
 
   queue->host       = host;
   queue->index      = host->header->numQueues;
@@ -372,5 +374,12 @@ LGMP_STATUS lgmpHostReadData(PLGMPHostQueue queue, void * data, size_t * size)
 
   atomic_fetch_add(&hq->cMsgAvail, 1);
   LGMP_UNLOCK(hq->cMsgLock);
+  return LGMP_OK;
+}
+
+LGMP_STATUS lgmpHostAckData(PLGMPHostQueue queue)
+{
+  struct LGMPHeaderQueue *hq = queue->hq;
+  atomic_fetch_add(&hq->cMsgRSerial, 1);
   return LGMP_OK;
 }
