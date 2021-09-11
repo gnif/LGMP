@@ -213,7 +213,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
         subs = LGMP_SUBS_OR_BAD(subs, newBadSubs);
         const uint64_t timeout = now + LGMP_MAX_QUEUE_TIMEOUT;
         for(unsigned int id = 0; id < 32; ++id)
-          if (newBadSubs & (1 << id))
+          if (newBadSubs & (1U << id))
             hq->timeout[id] = timeout;
 
         // clear the pending subs

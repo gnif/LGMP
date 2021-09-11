@@ -67,6 +67,8 @@ int main(int argc, char * argv[])
     printf("lgmpClientSessionInit: %s\n", lgmpStatusString(status));
   }
 
+  printf("Session valid\n");
+
   PLGMPClientQueue queue;
   while((status = lgmpClientSubscribe(client, 0, &queue)) != LGMP_OK)
   {
