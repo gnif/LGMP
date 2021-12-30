@@ -47,10 +47,24 @@ struct LGMPHost
   size_t    avail;
   size_t    nextFree;
   bool      started;
+  uint32_t  sessionID;
+  uint32_t  numQueues;
+  uint8_t * udata;
+  uint32_t  udataSize;
 
   struct LGMPHeader    * header;
   struct LGMPHostQueue   queues[LGMP_MAX_QUEUES];
 };
+
+static void initHeader(PLGMPHost host)
+{
+  host->header->magic     = LGMP_PROTOCOL_MAGIC;
+  host->header->timestamp = lgmpGetClockMS();
+  host->header->version   = LGMP_PROTOCOL_VERSION;
+  host->header->numQueues = host->numQueues;
+  host->header->udataSize = host->udataSize;
+  memcpy(host->header->udata, host->udata, host->udataSize);
+}
 
 LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result,
     uint32_t udataSize, uint8_t * udata)
@@ -68,32 +82,36 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result,
   if (size < sizeof(struct LGMPHeader) + udataSize)
     return LGMP_ERR_INVALID_SIZE;
 
-  *result = malloc(sizeof(struct LGMPHost));
+  *result = calloc(1, sizeof(**result));
   if (!*result)
     return LGMP_ERR_NO_MEM;
 
   PLGMPHost host = *result;
-
   host->mem      = mem;
   host->size     = size;
   host->avail    = size - sizeof(struct LGMPHeader) - udataSize;
   host->nextFree = sizeof(struct LGMPHeader) + udataSize;
   host->header   = (struct LGMPHeader *)mem;
-  host->started  = false;
+
+  // take a copy of the user data so we can re-init the header if it gets wiped
+  // out by a misbehaving process.
+  host->udata = malloc(udataSize);
+  if (!host->udata)
+  {
+    free(*result);
+    *result = NULL;
+    return LGMP_ERR_NO_MEM;
+  }
+  host->udataSize = udataSize;
 
   // ensure the sessionID changes so that clients can determine if the host was
   // restarted.
   const uint32_t sessionID = host->header->sessionID;
-  while(sessionID == host->header->sessionID)
-    host->header->sessionID = rand();
+  while(sessionID == host->sessionID)
+    host->sessionID = rand();
+  host->header->sessionID = host->sessionID;
 
-  host->header->magic     = LGMP_PROTOCOL_MAGIC;
-  host->header->timestamp = lgmpGetClockMS();
-  host->header->version   = LGMP_PROTOCOL_VERSION;
-  host->header->numQueues = 0;
-  host->header->udataSize = udataSize;
-  memcpy(host->header->udata, udata, udataSize);
-
+  initHeader(host);
   return LGMP_OK;
 }
 
@@ -117,7 +135,7 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   if (host->started)
     return LGMP_ERR_HOST_STARTED;
 
-  if (host->header->numQueues == LGMP_MAX_QUEUES)
+  if (host->numQueues == LGMP_MAX_QUEUES)
     return LGMP_ERR_NO_QUEUES;
 
   // + 1 for end marker
@@ -127,10 +145,10 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   if (host->avail < needed)
     return LGMP_ERR_NO_SHARED_MEM;
 
-  *result = &host->queues[host->header->numQueues];
+  *result = &host->queues[host->numQueues];
   PLGMPHostQueue queue = *result;
 
-  struct LGMPHeaderQueue * hq = &host->header->queues[host->header->numQueues++];
+  struct LGMPHeaderQueue * hq = &host->header->queues[host->numQueues++];
   hq->queueID        = config.queueID;
   hq->numMessages    = numMessages;
   hq->newSubCount    = 0;
@@ -150,13 +168,14 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   atomic_store(&hq->cMsgRSerial, 0);
 
   queue->host       = host;
-  queue->index      = host->header->numQueues;
+  queue->index      = host->numQueues;
   queue->position   = 0;
   queue->hq         = hq;
 
   host->avail    -= needed;
   host->nextFree += needed;
 
+  ++host->header->numQueues;
   return LGMP_OK;
 }
 
@@ -181,10 +200,17 @@ uint32_t lgmpHostQueuePending(PLGMPHostQueue queue)
 LGMP_STATUS lgmpHostProcess(PLGMPHost host)
 {
   assert(host);
+
+  // for an unkown reason sometimes when the guest starts the shared memory is
+  // zeroed by something external after we have initialized it, try to detect
+  // and recover from this.
+  if (host->header->magic != LGMP_PROTOCOL_MAGIC)
+    initHeader(host);
+
   atomic_store(&host->header->timestamp, lgmpGetClockMS());
 
   // each queue
-  for(unsigned int i = 0; i < host->header->numQueues; ++i)
+  for(unsigned int i = 0; i < host->numQueues; ++i)
   {
     struct LGMPHostQueue     *queue    = &host->queues[i];
     struct LGMPHeaderQueue   *hq       = queue->hq;
@@ -275,7 +301,7 @@ LGMP_STATUS lgmpHostMemAllocAligned(PLGMPHost host, uint32_t size,
   if (size > host->avail - (nextFree - host->nextFree))
     return LGMP_ERR_NO_SHARED_MEM;
 
-  *result = malloc(sizeof(struct LGMPMemory));
+  *result = calloc(1, sizeof(**result));
   if (!*result)
     return LGMP_ERR_NO_MEM;
 

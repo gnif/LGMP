@@ -69,7 +69,7 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
 
   struct LGMPHeader *header = (struct LGMPHeader*)mem;
 
-  *result = malloc(sizeof(struct LGMPClient));
+  *result = calloc(1, sizeof(**result));
   if (!*result)
     return LGMP_ERR_NO_MEM;
 
