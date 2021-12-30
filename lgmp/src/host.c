@@ -203,10 +203,10 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
   assert(host);
 
   // for an unkown reason sometimes when the guest starts the shared memory is
-  // zeroed by something external after we have initialized it, try to detect
-  // and recover from this.
+  // zeroed by something external after we have initialized it, detect this and
+  // report it.
   if (host->header->magic != LGMP_PROTOCOL_MAGIC)
-    initHeader(host);
+    return LGMP_ERR_CORRUPTED;
 
   atomic_store(&host->header->timestamp, lgmpGetClockMS());
 
