@@ -102,6 +102,7 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result,
     *result = NULL;
     return LGMP_ERR_NO_MEM;
   }
+  memcpy(host->udata, udata, udataSize);
   host->udataSize = udataSize;
 
   // ensure the sessionID changes so that clients can determine if the host was
