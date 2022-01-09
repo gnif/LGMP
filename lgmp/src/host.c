@@ -30,6 +30,8 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 
 #define LGMP_MAX_QUEUE_TIMEOUT 10000 //10s
 
+#define ALIGN(x) (x + (3)) & ~(3)
+
 struct LGMPHostQueue
 {
   PLGMPHost    host;
@@ -89,8 +91,8 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result,
   PLGMPHost host = *result;
   host->mem      = mem;
   host->size     = size;
-  host->avail    = size - sizeof(struct LGMPHeader) - udataSize;
-  host->nextFree = sizeof(struct LGMPHeader) + udataSize;
+  host->avail    = size - ALIGN(sizeof(struct LGMPHeader) + udataSize);
+  host->nextFree = ALIGN(sizeof(struct LGMPHeader) + udataSize);
   host->header   = (struct LGMPHeader *)mem;
 
   // take a copy of the user data so we can re-init the header if it gets wiped
@@ -173,8 +175,8 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   queue->position   = 0;
   queue->hq         = hq;
 
-  host->avail    -= needed;
-  host->nextFree += needed;
+  host->avail    -= ALIGN(needed);
+  host->nextFree += ALIGN(needed);
 
   ++host->header->numQueues;
   return LGMP_OK;
@@ -279,7 +281,7 @@ size_t lgmpHostMemAvail(PLGMPHost host)
 
 LGMP_STATUS lgmpHostMemAlloc(PLGMPHost host, uint32_t size, PLGMPMemory *result)
 {
-  return lgmpHostMemAllocAligned(host, size, 0, result);
+  return lgmpHostMemAllocAligned(host, size, 4, result);
 }
 
 LGMP_STATUS lgmpHostMemAllocAligned(PLGMPHost host, uint32_t size,
