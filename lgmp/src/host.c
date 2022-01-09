@@ -30,7 +30,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 
 #define LGMP_MAX_QUEUE_TIMEOUT 10000 //10s
 
-#define ALIGN(x) (x + (3)) & ~(3)
+#define ALIGN(x) ((x + (3)) & ~(3))
 
 struct LGMPHostQueue
 {
