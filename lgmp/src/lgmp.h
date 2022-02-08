@@ -37,7 +37,7 @@ struct LGMPMemory
 };
 
 // returns a milliseond resolution monotonic counter
-inline static uint64_t lgmpGetClockMS()
+inline static uint64_t lgmpGetClockMS(void)
 {
 #if defined(_WIN32)
   static LARGE_INTEGER freq  = { 0 };
