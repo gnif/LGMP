@@ -12,6 +12,7 @@ set(SOURCES
 add_compile_options(
   "-Wall"
   "-Werror"
+  "-Wstrict-prototypes"
   "-Wfatal-errors"
   "-ffast-math"
   "-fdata-sections"
