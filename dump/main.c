@@ -141,14 +141,18 @@ int main(int argc, char * argv[])
         "  maxTime        = %u\n"
         "  position       = %u\n"
         "  msgTimeout     = %u\n"
-        "  messagesOffset = 0x%08x\n",
+        "  messagesOffset = 0x%08x\n"
+        "  cMsgWPos       = %u\n"
+        "  cMsgAvail      = %u\n",
         i,
         hq->queueID,
         hq->numMessages,
         hq->maxTime,
         atomic_load(&hq->position),
         atomic_load(&hq->msgTimeout),
-        hq->messagesOffset);
+        hq->messagesOffset,
+        hq->cMsgWPos,
+        hq->cMsgAvail);
 
       for(int i = 0; i < 32; ++i)
         printw("  client %-2d     = id:%x, timeout:%u\n",

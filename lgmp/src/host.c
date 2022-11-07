@@ -395,7 +395,7 @@ LGMP_STATUS lgmpHostReadData(PLGMPHostQueue queue, void * data, size_t * size)
   LGMP_LOCK(hq->cMsgLock);
 
   struct LGMPClientMessage * msg = &hq->cMsgs[queue->cMsgPos];
-  if (queue->cMsgPos++ == LGMP_MSGS_MAX)
+  if (++queue->cMsgPos == LGMP_MSGS_MAX)
     queue->cMsgPos = 0;
 
   memcpy(data, msg->data, msg->size);

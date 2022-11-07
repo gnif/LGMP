@@ -473,7 +473,7 @@ LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, const void * data,
   memcpy(hq->cMsgs[wpos].data, data, size);
 
   // advance the write pointer and decrement the available count
-  if (wpos++ == LGMP_MSGS_MAX)
+  if (++wpos == LGMP_MSGS_MAX)
     wpos = 0;
   atomic_store(&hq->cMsgWPos, wpos);
   atomic_fetch_sub(&hq->cMsgAvail, 1);
