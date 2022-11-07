@@ -46,6 +46,7 @@ struct LGMPClient
   uint8_t           * mem;
   struct LGMPHeader * header;
 
+  uint32_t id;
   uint32_t sessionID;
   uint64_t hosttime;
   uint64_t lastHeartbeat;
@@ -91,7 +92,7 @@ void lgmpClientFree(PLGMPClient * client)
 }
 
 LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
-    uint8_t ** udata)
+    uint8_t ** udata, uint32_t * clientID)
 {
   assert(client);
   struct LGMPHeader * header = client->header;
@@ -109,12 +110,14 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
     return LGMP_ERR_INVALID_SESSION;
 #endif
 
+  client->id            = rand();
   client->sessionID     = header->sessionID;
   client->hosttime      = timestamp;
   client->lastHeartbeat = lgmpGetClockMS();
 
   if (udataSize) *udataSize = header->udataSize;
   if (udata    ) *udata     = (uint8_t*)&header->udata;
+  if (clientID ) *clientID  = client->id;
 
   memset(&client->queues, 0, sizeof(client->queues));
   return LGMP_OK;
@@ -184,8 +187,13 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
     uint32_t reap = 0;
     for(unsigned int id = 0; id < 32; ++id)
     {
-      if ((LGMP_SUBS_BAD(subs) & (1U << id)) && hosttime > hq->timeout[id])
-        reap |= (1U << id);
+      uint32_t bit = (1U << id);
+      if ((LGMP_SUBS_BAD(subs) & bit) && hosttime > hq->timeout[id])
+      {
+        reap |= bit;
+        hq->timeout [id] = 0;
+        hq->clientID[id] = 0;
+      }
     }
     subs = LGMP_SUBS_CLEAR(subs, reap);
   }
@@ -202,6 +210,8 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
     return LGMP_ERR_QUEUE_FULL; //TODO: better return error
   }
 
+  hq->timeout [id] = 0;
+  hq->clientID[id] = client->id;
   subs = LGMP_SUBS_SET(subs, 1U << id);
   atomic_store(&hq->subs, subs);
   atomic_fetch_add(&hq->newSubCount, 1);
@@ -241,6 +251,8 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPClientQueue * result)
   // unset the queue id bit
   subs = LGMP_SUBS_CLEAR(subs, bit);
   atomic_store(&hq->subs, subs);
+  hq->timeout [queue->id] = 0;
+  hq->clientID[queue->id] = 0;
   LGMP_QUEUE_UNLOCK(hq);
 
   memset(queue, 0, sizeof(struct LGMPClientQueue));
@@ -257,7 +269,7 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
   const uint32_t bit = 1U << queue->id;
   const uint64_t subs = atomic_load(&hq->subs);
 
-  if (LGMP_SUBS_BAD(subs) & bit)
+  if (LGMP_SUBS_BAD(subs) & bit || hq->clientID[queue->id] != queue->client->id)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
   if (!(LGMP_SUBS_ON(subs) & bit))

@@ -27,6 +27,10 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <stdbool.h>
 #include <signal.h>
 #include <curses.h>
+#include <string.h>
+
+#include <sys/ioctl.h>
+#include "../kvmfr.h"
 
 #include "../../lgmp/src/headers.h"
 
@@ -62,28 +66,44 @@ int main(int argc, char * argv[])
     exit(EXIT_FAILURE);
   }
 
-  struct stat st;
-  if (stat(shmFile, &st) != 0)
+  int fd;
+  bool dmabuf = false;
+  unsigned devSize;
+
+  if (strlen(shmFile) > 8 && memcmp(shmFile, "/dev/kvmfr", 10) == 0)
   {
-    perror("stat of shmFile failed");
-    exit(EXIT_FAILURE);
+    dmabuf = true;
+    fd = open(shmFile, O_RDWR, (mode_t)0600);
+
+    // get the device size
+    devSize = ioctl(fd, KVMFR_DMABUF_GETSIZE, 0);
+  }
+  else
+  {
+    struct stat st;
+    if (stat(shmFile, &st) != 0)
+    {
+      perror("stat of shmFile failed");
+      exit(EXIT_FAILURE);
+    }
+    devSize = st.st_size;
+    fd = open(shmFile, O_RDONLY);
   }
 
-  int fd = open(shmFile, O_RDONLY);
-  if (fd < 0)
+  if (!fd)
   {
     perror("open failed");
     exit(EXIT_FAILURE);
   }
 
-  void * ram = mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+  void * ram = mmap(0, devSize, PROT_READ, MAP_SHARED, fd, 0);
   if (!ram)
   {
     perror("mmap failed");
     goto out_close;
   }
 
-  fprintf(stderr, "Mapped %s - %uMiB\n", shmFile, st.st_size / 1048576UL);
+  fprintf(stderr, "Mapped %s - %uMiB\n", shmFile, devSize / 1048576UL);
 
   signal(SIGINT, finish);
   initscr();
@@ -97,8 +117,8 @@ int main(int argc, char * argv[])
       "LGMPHeader\n"
       "  magic     = %08x\n"
       "  version   = %u\n"
-      "  timestamp = %lu\n"
       "  sessionID = %u\n"
+      "  timestamp = %lu\n"
       "  numQueues = %u\n"
       "  udataSize = %u\n",
       header->magic,
@@ -120,17 +140,20 @@ int main(int argc, char * argv[])
         "  numMessages    = %u\n"
         "  maxTime        = %u\n"
         "  position       = %u\n"
+        "  msgTimeout     = %u\n"
         "  messagesOffset = 0x%08x\n",
         i,
         hq->queueID,
         hq->numMessages,
         hq->maxTime,
         atomic_load(&hq->position),
+        atomic_load(&hq->msgTimeout),
         hq->messagesOffset);
 
       for(int i = 0; i < 32; ++i)
-        printw("  timeout %-2d     = %u\n",
+        printw("  client %-2d     = id:%x, timeout:%u\n",
           i,
+          hq->clientID[i],
           hq->timeout[i]);
 
       printw(
@@ -146,7 +169,7 @@ int main(int argc, char * argv[])
   }
 
   endwin();
-  munmap(ram, st.st_size);
+  munmap(ram, devSize);
 out_close:
   close(fd);
 out:

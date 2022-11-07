@@ -28,8 +28,6 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <unistd.h>
 #include <stdatomic.h>
 
-#define LGMP_MAX_QUEUE_TIMEOUT 10000 //10s
-
 #define ALIGN(x) ((x + (3)) & ~(3))
 
 struct LGMPHostQueue
@@ -211,7 +209,8 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
   if (host->header->magic != LGMP_PROTOCOL_MAGIC)
     return LGMP_ERR_CORRUPTED;
 
-  atomic_store(&host->header->timestamp, lgmpGetClockMS());
+  const uint64_t now = lgmpGetClockMS();
+  atomic_store(&host->header->timestamp, now);
 
   // each queue
   for(unsigned int i = 0; i < host->numQueues; ++i)
@@ -228,9 +227,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
       continue;
     }
 
-    uint64_t      subs = atomic_load(&hq->subs);
-    const uint64_t now = lgmpGetClockMS();
-
+    uint64_t subs = atomic_load(&hq->subs);
     for(;;)
     {
       struct LGMPHeaderMessage *msg = &messages[hq->start];
@@ -241,7 +238,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
       {
         // reset garbage collection timeout for new bad subs
         subs = LGMP_SUBS_OR_BAD(subs, newBadSubs);
-        const uint64_t timeout = now + LGMP_MAX_QUEUE_TIMEOUT;
+        const uint64_t timeout = now + hq->maxTime;
         for(unsigned int id = 0; id < 32; ++id)
           if (newBadSubs & (1U << id))
             hq->timeout[id] = timeout;
@@ -413,5 +410,31 @@ LGMP_STATUS lgmpHostAckData(PLGMPHostQueue queue)
 {
   struct LGMPHeaderQueue *hq = queue->hq;
   atomic_fetch_add(&hq->cMsgRSerial, 1);
+  return LGMP_OK;
+}
+
+LGMP_STATUS lgmpHostGetClientIDs(PLGMPHostQueue queue, uint32_t clientIDs[32],
+    unsigned int * count)
+{
+  assert(queue);
+  assert(count);
+
+  struct LGMPHeaderQueue *hq = queue->hq;
+
+  LGMP_QUEUE_LOCK(hq);
+  const uint64_t now = lgmpGetClockMS();
+
+  uint64_t subs = atomic_load(&hq->subs);
+  *count = 0;
+  for(int i = 0; i < 32; ++i)
+  {
+    const uint32_t bit = 1U << i;
+    if (!(LGMP_SUBS_ON(subs) & bit) ||
+        ((LGMP_SUBS_BAD(subs) & bit) && now > hq->timeout[bit]))
+      continue;
+
+    clientIDs[(*count)++] = hq->clientID[i];
+  }
+  LGMP_QUEUE_UNLOCK(hq);
   return LGMP_OK;
 }

@@ -23,27 +23,81 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <sys/types.h>
+#include <string.h>
+#include <time.h>
+
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include "../kvmfr.h"
 
 #include "lgmp/client.h"
+#include "../../lgmp/src/lgmp.h"
 
 void * ram;
-#define SHARED_FILE "/dev/shm/lgmp-test"
-#define RAM_SIZE (10*1048576)
 
 int main(int argc, char * argv[])
 {
   unsigned int delay = 50;
-  if (argc > 1)
-    delay = atoi(argv[1]) * 1000;
+  const char * shmFile = NULL;
+  bool error = false;
 
-  int fd = open(SHARED_FILE, O_RDWR, (mode_t)0600);
-  if (fd < 0)
-  {
-    perror("open failed");
-    return -1;
+  int opt;
+  while ((opt = getopt(argc, argv, "f:d:")) != -1) {
+    switch(opt)
+    {
+      case 'f':
+        shmFile = optarg;
+        break;
+
+      case 'd':
+        delay = atoi(optarg) * 1000;
+        break;
+
+      default:
+        error = true;
+        break;
+    }
   }
 
-  ram = mmap(0, RAM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  srand(lgmpGetClockMS());
+
+  if (!shmFile || error)
+  {
+    fprintf(stderr, "Invalid usage, expected: -f /dev/shm/file -d N\n");
+    exit(EXIT_FAILURE);
+  }
+
+  int fd;
+  bool dmabuf = false;
+  unsigned devSize;
+
+  if (strlen(shmFile) > 8 && memcmp(shmFile, "/dev/kvmfr", 10) == 0)
+  {
+    dmabuf = true;
+    fd = open(shmFile, O_RDWR, (mode_t)0600);
+
+    // get the device size
+    devSize = ioctl(fd, KVMFR_DMABUF_GETSIZE, 0);
+  }
+  else
+  {
+    struct stat st;
+    if (stat(shmFile, &st) != 0)
+    {
+      perror("stat of shmFile failed");
+      exit(EXIT_FAILURE);
+    }
+    devSize = st.st_size;
+    fd = open(shmFile, O_RDWR);
+  }
+
+  if (!fd)
+  {
+    perror("open failed");
+    exit(EXIT_FAILURE);
+  }
+
+  void * ram = mmap(0, devSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (!ram)
   {
     perror("mmap failed");
@@ -52,7 +106,7 @@ int main(int argc, char * argv[])
 
   PLGMPClient client;
   LGMP_STATUS status;
-  while((status = lgmpClientInit(ram, RAM_SIZE, &client))
+  while((status = lgmpClientInit(ram, devSize, &client))
       != LGMP_OK)
   {
     printf("lgmpClientInit %s\n", lgmpStatusString(status));
@@ -61,13 +115,15 @@ int main(int argc, char * argv[])
 
   uint32_t   udataSize;
   uint8_t  * udata;
-  while((status = lgmpClientSessionInit(client, &udataSize, &udata)) != LGMP_OK)
+  uint32_t   clientID;
+  while((status = lgmpClientSessionInit(client, &udataSize, &udata, &clientID))
+      != LGMP_OK)
   {
     usleep(100000);
     printf("lgmpClientSessionInit: %s\n", lgmpStatusString(status));
   }
 
-  printf("Session valid\n");
+  printf("Session valid, clientID: %x\n", clientID);
 
   PLGMPClientQueue queue;
   while((status = lgmpClientSubscribe(client, 0, &queue)) != LGMP_OK)
@@ -82,8 +138,9 @@ int main(int argc, char * argv[])
   }
 
   uint32_t serial;
-  bool dataDone = false;
+  bool dataDone = true;
 
+#if 0
   uint8_t data[32];
   for(int i = 0; i < 20; ++i)
   {
@@ -99,8 +156,10 @@ int main(int argc, char * argv[])
       goto out_lgmpclient;
     }
   }
+#endif
 
   uint32_t lastCount = 0;
+  unsigned int msgCount = 0;
   while(lgmpClientSessionValid(client))
   {
     LGMPMessage msg;
@@ -118,9 +177,12 @@ int main(int argc, char * argv[])
       }
     }
 
+    printf("message %u\n", ++msgCount);
+
     if (delay)
       printf("Got %4u: %s\n", msg.udata, (char *)msg.mem);
 
+#if 0
     if (!lastCount)
       lastCount = msg.udata;
     else
@@ -132,6 +194,7 @@ int main(int argc, char * argv[])
       }
       lastCount = msg.udata;
     }
+#endif
 
     if (delay)
       usleep(delay);
@@ -144,7 +207,7 @@ int main(int argc, char * argv[])
     {
       uint32_t hostSerial;
       lgmpClientGetSerial(queue, &hostSerial);
-      printf("serial %d - hostSerial %d\n", serial, hostSerial);
+      printf("serial %u - hostSerial %u\n", serial, hostSerial);
       if (hostSerial >= serial)
       {
         dataDone = true;
@@ -162,7 +225,7 @@ out_unsub:
 out_lgmpclient:
   lgmpClientFree(&client);
 out_unmap:
-  munmap(ram, RAM_SIZE);
+  munmap(ram, devSize);
 out_close:
   close(fd);
 out:

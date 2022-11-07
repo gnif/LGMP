@@ -70,7 +70,7 @@ int main(int argc, char * argv[])
   {
     .queueID     = 0,
     .numMessages = 10,
-    .subTimeout  = 100
+    .subTimeout  = 1000
   };
 
   PLGMPHostQueue queue;
@@ -145,6 +145,12 @@ int main(int argc, char * argv[])
       --pendingAck;
       lgmpHostAckData(queue);
     }
+
+    uint32_t clientIDs[32];
+    unsigned int count;
+    lgmpHostGetClientIDs(queue, clientIDs, &count);
+    for(int i = 0; i < count; ++i)
+      printf("Client %x\n", clientIDs[i]);
 
     usleep(1000);
   }
