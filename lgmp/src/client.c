@@ -408,8 +408,10 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
     }
 
     // message finished
-    if (++hq->start == hq->numMessages)
+    if (hq->start + 1 == hq->numMessages)
       hq->start = 0;
+    else
+      ++hq->start;
 
     // decrement the count and update the timeout
     atomic_fetch_sub(&hq->count, 1);

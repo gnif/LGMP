@@ -256,8 +256,10 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
         break;
 
       // message finished
-      if (++hq->start == hq->numMessages)
+      if (hq->start + 1 == hq->numMessages)
         hq->start = 0;
+      else
+        ++hq->start;
 
       // decrement the queue count and break out if there are no more messages
       if (atomic_fetch_sub(&queue->hq->count, 1) == 1)
