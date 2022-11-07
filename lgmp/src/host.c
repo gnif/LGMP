@@ -110,7 +110,7 @@ LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result,
   // ensure the sessionID changes so that clients can determine if the host was
   // restarted.
   const uint32_t sessionID = host->header->sessionID;
-  while(sessionID == host->header->sessionID)
+  while(sessionID == host->sessionID)
     host->sessionID = rand();
   host->header->sessionID = host->sessionID;
 
