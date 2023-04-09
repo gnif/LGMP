@@ -25,7 +25,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include "lgmp.h"
 
 #define LGMP_PROTOCOL_MAGIC   0x504d474c
-#define LGMP_PROTOCOL_VERSION 5
+#define LGMP_PROTOCOL_VERSION 6
 #define LGMP_MAX_QUEUES       5
 
 // maximum number of client messages supported
@@ -39,10 +39,9 @@ Place, Suite 330, Boston, MA 02111-1307 USA
     (!InterlockedBitTestAndSetAcquire(&(lock), 0))
 
   #define LGMP_UNLOCK(lock) \
-    InterlockedBitTestAndResetRelease(&(lock), 0)
+    InterlockedAndRelease(&(lock), ~1)
 
   #define _Atomic(T) volatile T
-  typedef LONG volatile atomic_flag;
 
   #define atomic_load(var) *(var)
   #define atomic_store(var, v) (*var = v)
@@ -50,18 +49,32 @@ Place, Suite 330, Boston, MA 02111-1307 USA
   #define atomic_fetch_and(var, v) InterlockedAnd((volatile LONG *)(var), v)
   #define atomic_fetch_sub(var, v) InterlockedAdd((volatile LONG *)(var), -(v))
   #define atomic_exchange(var, v) InterlockedExchange((volatile LONG *)(var), v)
-  #define atomic_flag_clear(var) atomic_store(var, 0)
+
 #else
   #include <stdatomic.h>
 
-  #define LGMP_LOCK(lock) \
-    while (atomic_flag_test_and_set_explicit(&(lock), memory_order_acquire)) { ; }
+  /**
+   * Note: we do not use atomic_flag in order to remain ABI compatible with MSVC
+   */
 
-  #define LGMP_TRY_LOCK(lock) \
-    (!atomic_flag_test_and_set_explicit(&(lock), memory_order_acquire))
+  static inline void _LGMP_LOCK(_Atomic(uint32_t) * lock)
+  {
+    uint32_t expected = 0; \
+    while (!atomic_compare_exchange_weak_explicit(lock, &expected, 1, \
+      memory_order_acquire, memory_order_relaxed)) { expected = 0; } \
+  }
+  #define LGMP_LOCK(lock) _LGMP_LOCK(&(lock))
+
+  static inline bool _LGMP_TRY_LOCK(_Atomic(uint32_t) * lock)
+  {
+    uint32_t expected = 0;
+    return atomic_compare_exchange_weak_explicit(lock, &expected, 1,
+      memory_order_acquire, memory_order_relaxed);
+  }
+  #define LGMP_TRY_LOCK(lock) _LGMP_TRY_LOCK(&(lock))
 
   #define LGMP_UNLOCK(lock) \
-    atomic_flag_clear_explicit(&(lock), memory_order_release);
+    atomic_fetch_and_explicit(&(lock), ~1u, memory_order_release)
 #endif
 
 #define LGMP_QUEUE_LOCK(hq) LGMP_LOCK(hq->lock)
@@ -74,19 +87,28 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #define LGMP_SUBS_CLEAR(x, cl)   ((x) & ~((cl) | ((uint64_t)(cl) << 32)))
 #define LGMP_SUBS_SET(x, st)     ((x) | ((uint64_t)(st) << 32))
 
+#ifdef _MSC_VER
+  #pragma pack(push, 8)
+  #define ALIGNED
+#else
+  #define ALIGNED __attribute__((aligned(8)))
+#endif
+
 struct LGMPHeaderMessage
 {
   uint32_t udata;
   uint32_t size;
   uint32_t offset;
   _Atomic(uint32_t) pendingSubs;
-};
+}
+ALIGNED;
 
 struct LGMPClientMessage
 {
   uint32_t size;
   uint8_t  data[LGMP_MSGS_SIZE];
-};
+}
+ALIGNED;
 
 struct LGMPHeaderQueue
 {
@@ -101,20 +123,21 @@ struct LGMPHeaderQueue
   uint32_t clientID[32];
 
   /* the lock MUST be held to use the following values */
-  atomic_flag lock;
+  _Atomic(uint32_t) lock;
   _Atomic(uint64_t) subs; // see LGMP_SUBS_* macros
   uint32_t start;
   _Atomic(uint64_t) msgTimeout;
   _Atomic(uint32_t) count;
 
   /* messages submitted from the client */
-  atomic_flag cMsgLock;
+  _Atomic(uint32_t) cMsgLock;
   _Atomic(uint32_t) cMsgAvail;
   _Atomic(uint32_t) cMsgWPos;
   _Atomic(uint32_t) cMsgWSerial;
   _Atomic(uint32_t) cMsgRSerial;
   struct LGMPClientMessage cMsgs[LGMP_MSGS_MAX];
-};
+}
+ALIGNED;
 
 #ifdef _MSC_VER
   // don't warn on zero length arrays
@@ -132,10 +155,12 @@ struct LGMPHeader
   struct LGMPHeaderQueue queues[LGMP_MAX_QUEUES];
   uint32_t udataSize;
   uint8_t  udata[0];
-};
+}
+ALIGNED;
 
 #ifdef _MSC_VER
   #pragma warning(pop)
+  #pragma pack(pop)
 #endif
 
 #endif
