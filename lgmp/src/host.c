@@ -25,8 +25,6 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <stdatomic.h>
 
 #define ALIGN(x) ((x + (3)) & ~(3))
 
@@ -44,8 +42,8 @@ struct LGMPHost
 {
   uint8_t * mem;
   size_t    size;
-  size_t    avail;
-  size_t    nextFree;
+  uint32_t  avail;
+  uint32_t  nextFree;
   bool      started;
   uint32_t  sessionID;
   uint32_t  numQueues;
@@ -66,7 +64,7 @@ static void initHeader(PLGMPHost host)
   memcpy(host->header->udata, host->udata, host->udataSize);
 }
 
-LGMP_STATUS lgmpHostInit(void *mem, const size_t size, PLGMPHost * result,
+LGMP_STATUS lgmpHostInit(void *mem, const uint32_t size, PLGMPHost * result,
     uint32_t udataSize, uint8_t * udata)
 {
   assert(mem);

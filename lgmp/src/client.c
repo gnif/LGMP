@@ -25,8 +25,6 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <stdatomic.h>
 
 #define LGMP_HEARTBEAT_TIMEOUT 1000
 
@@ -212,7 +210,7 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
 
   hq->timeout [id] = 0;
   hq->clientID[id] = client->id;
-  subs = LGMP_SUBS_SET(subs, 1U << id);
+  subs = LGMP_SUBS_SET(subs, 1ULL << id);
   atomic_store(&hq->subs, subs);
   atomic_fetch_add(&hq->newSubCount, 1);
 
@@ -441,7 +439,7 @@ done:
 }
 
 LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, const void * data,
-    size_t size, uint32_t * serial)
+    uint32_t size, uint32_t * serial)
 {
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;

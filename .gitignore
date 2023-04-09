@@ -2,3 +2,12 @@
 *.o
 *.exe
 */build
+.vs/
+Debug/
+x64/
+x86/
+Release/
+Releases/
+*.user
+*.sln.docstates
+*.suo

@@ -21,7 +21,6 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #define LGMP_PRIVATE_HEADERS_H
 
 #include <stdint.h>
-#include <stdatomic.h>
 
 #include "lgmp.h"
 
@@ -32,24 +31,48 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 // maximum number of client messages supported
 #define LGMP_MSGS_MAX  10
 
-#define LGMP_SUBS_ON(x)          (uint32_t)((x) >> 32)
-#define LGMP_SUBS_BAD(x)         (uint32_t)((x) >>  0)
-#define LGMP_SUBS_OR_BAD(x, bad) ((x) | (bad))
-#define LGMP_SUBS_CLEAR(x, cl)   ((x) & ~((cl) | ((uint64_t)(cl) << 32)))
-#define LGMP_SUBS_SET(x, st)     ((x) | ((uint64_t)(st) << 32))
+#ifdef _MSC_VER
+  #define LGMP_LOCK(lock) \
+    while (InterlockedBitTestAndSetAcquire(&(lock), 0)) { ; }
 
-#define LGMP_LOCK(lock) \
-  while (atomic_flag_test_and_set_explicit(&(lock), memory_order_acquire)) { ; }
+  #define LGMP_TRY_LOCK(lock) \
+    (!InterlockedBitTestAndSetAcquire(&(lock), 0))
 
-#define LGMP_TRY_LOCK(lock) \
-  (!atomic_flag_test_and_set_explicit(&(lock), memory_order_acquire))
+  #define LGMP_UNLOCK(lock) \
+    InterlockedBitTestAndResetRelease(&(lock), 0)
 
-#define LGMP_UNLOCK(lock) \
-  atomic_flag_clear_explicit(&(lock), memory_order_release);
+  #define _Atomic(T) volatile T
+  typedef LONG volatile atomic_flag;
+
+  #define atomic_load(var) *(var)
+  #define atomic_store(var, v) (*var = v)
+  #define atomic_fetch_add(var, v) InterlockedAdd((volatile LONG *)(var), v)
+  #define atomic_fetch_and(var, v) InterlockedAnd((volatile LONG *)(var), v)
+  #define atomic_fetch_sub(var, v) InterlockedAdd((volatile LONG *)(var), -(v))
+  #define atomic_exchange(var, v) InterlockedExchange((volatile LONG *)(var), v)
+  #define atomic_flag_clear(var) atomic_store(var, 0)
+#else
+  #include <stdatomic.h>
+
+  #define LGMP_LOCK(lock) \
+    while (atomic_flag_test_and_set_explicit(&(lock), memory_order_acquire)) { ; }
+
+  #define LGMP_TRY_LOCK(lock) \
+    (!atomic_flag_test_and_set_explicit(&(lock), memory_order_acquire))
+
+  #define LGMP_UNLOCK(lock) \
+    atomic_flag_clear_explicit(&(lock), memory_order_release);
+#endif
 
 #define LGMP_QUEUE_LOCK(hq) LGMP_LOCK(hq->lock)
 #define LGMP_QUEUE_TRY_LOCK(hq) LGMP_TRY_LOCK(hq->lock)
 #define LGMP_QUEUE_UNLOCK(hq) LGMP_UNLOCK(hq->lock)
+
+#define LGMP_SUBS_ON(x)          (uint32_t)(x >> 32)
+#define LGMP_SUBS_BAD(x)         (uint32_t)(x >>  0)
+#define LGMP_SUBS_OR_BAD(x, bad) ((x) | (bad))
+#define LGMP_SUBS_CLEAR(x, cl)   ((x) & ~((cl) | ((uint64_t)(cl) << 32)))
+#define LGMP_SUBS_SET(x, st)     ((x) | ((uint64_t)(st) << 32))
 
 struct LGMPHeaderMessage
 {
@@ -93,6 +116,12 @@ struct LGMPHeaderQueue
   struct LGMPClientMessage cMsgs[LGMP_MSGS_MAX];
 };
 
+#ifdef _MSC_VER
+  // don't warn on zero length arrays
+  #pragma warning(push)
+  #pragma warning(disable: 4200)
+#endif
+
 struct LGMPHeader
 {
   uint32_t magic;
@@ -104,5 +133,9 @@ struct LGMPHeader
   uint32_t udataSize;
   uint8_t  udata[0];
 };
+
+#ifdef _MSC_VER
+  #pragma warning(pop)
+#endif
 
 #endif
