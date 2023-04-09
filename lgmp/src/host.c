@@ -152,7 +152,7 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   hq->queueID        = config.queueID;
   hq->numMessages    = numMessages;
   hq->newSubCount    = 0;
-  atomic_flag_clear(&hq->lock);
+  LGMP_LOCK_INIT(hq->lock);
   hq->subs           = 0;
   hq->position       = 0;
   hq->messagesOffset = host->nextFree;
@@ -161,7 +161,7 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   hq->maxTime        = config.subTimeout;
   hq->count          = 0;
 
-  atomic_flag_clear(&hq->cMsgLock);
+  LGMP_LOCK_INIT(hq->cMsgLock);
   atomic_store(&hq->cMsgAvail  , LGMP_MSGS_MAX);
   atomic_store(&hq->cMsgWPos   , 0);
   atomic_store(&hq->cMsgWSerial, 0);

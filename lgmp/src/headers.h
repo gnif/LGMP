@@ -32,14 +32,17 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #define LGMP_MSGS_MAX  10
 
 #ifdef _MSC_VER
+  #define LGMP_LOCK_INIT(lock) \
+    (lock) = 0;
+
   #define LGMP_LOCK(lock) \
-    while (InterlockedBitTestAndSetAcquire(&(lock), 0)) { ; }
+    while (InterlockedBitTestAndSetAcquire((volatile LONG *)&(lock), 0)) { ; }
 
   #define LGMP_TRY_LOCK(lock) \
-    (!InterlockedBitTestAndSetAcquire(&(lock), 0))
+    (!InterlockedBitTestAndSetAcquire((volatile LONG *)&(lock), 0))
 
   #define LGMP_UNLOCK(lock) \
-    InterlockedAndRelease(&(lock), ~1)
+    InterlockedAndRelease((volatile LONG *)&(lock), ~1)
 
   #define _Atomic(T) volatile T
 
@@ -56,6 +59,9 @@ Place, Suite 330, Boston, MA 02111-1307 USA
   /**
    * Note: we do not use atomic_flag in order to remain ABI compatible with MSVC
    */
+
+  #define LGMP_LOCK_INIT(lock) \
+    atomic_store(&(lock), 0);
 
   static inline void _LGMP_LOCK(_Atomic(uint32_t) * lock)
   {
