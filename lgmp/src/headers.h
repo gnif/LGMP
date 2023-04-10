@@ -94,10 +94,12 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #define LGMP_SUBS_SET(x, st)     ((x) | ((uint64_t)(st) << 32))
 
 #ifdef _MSC_VER
-  #pragma pack(push, 8)
+  //NOTE: the default alignment of MSVC matches that of gcc (for now)
+  //If this becomes an issue in the future we will need to investigate a
+  //solution
   #define ALIGNED
 #else
-  #define ALIGNED __attribute__((aligned(8)))
+  #define ALIGNED __attribute__((aligned(4)))
 #endif
 
 struct LGMPHeaderMessage
