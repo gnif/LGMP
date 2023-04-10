@@ -168,7 +168,6 @@ ALIGNED;
 
 #ifdef _MSC_VER
   #pragma warning(pop)
-  #pragma pack(pop)
 #endif
 
 #endif
