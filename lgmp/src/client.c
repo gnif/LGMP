@@ -326,9 +326,16 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
 
       // message finished
       hq->start = next;
-
       // decrement the count
-      atomic_fetch_sub(&hq->count, 1);
+      uint32_t count = atomic_fetch_sub(&hq->count, 1);
+
+      // check for underflow, this should never happen
+      if (count == 0)
+      {
+        atomic_store(&hq->count, 0);
+        LGMP_QUEUE_UNLOCK(hq);
+        return LGMP_ERR_CORRUPTED;
+      }
     }
   }
 
@@ -424,7 +431,16 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
       ++hq->start;
 
     // decrement the count and update the timeout
-    atomic_fetch_sub(&hq->count, 1);
+    uint32_t count = atomic_fetch_sub(&hq->count, 1);
+
+    // check for underflow, this should never happen
+    if (count == 0)
+    {
+      atomic_store(&hq->count, 0);
+      LGMP_QUEUE_UNLOCK(hq);
+      return LGMP_ERR_CORRUPTED;
+    }
+
     atomic_store(&hq->msgTimeout,
       atomic_load(&queue->header->timestamp) + hq->maxTime);
 

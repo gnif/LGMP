@@ -36,21 +36,24 @@ Place, Suite 330, Boston, MA 02111-1307 USA
     (lock) = 0;
 
   #define LGMP_LOCK(lock) \
-    while (InterlockedBitTestAndSetAcquire((volatile LONG *)&(lock), 0)) { ; }
+    while (InterlockedCompareExchange((volatile LONG *)&(lock), 1, 0) != 0) {}
 
   #define LGMP_TRY_LOCK(lock) \
-    (!InterlockedBitTestAndSetAcquire((volatile LONG *)&(lock), 0))
+    (InterlockedCompareExchange((volatile LONG *)&(lock), 1, 0) == 0)
 
   #define LGMP_UNLOCK(lock) \
-    InterlockedAndRelease((volatile LONG *)&(lock), ~1)
+    InterlockedExchange((volatile LONG *)&(lock), 0)
 
   #define _Atomic(T) volatile T
 
+  /**
+   * WARNING: These defines must be used with GREAT CARE. They do not perfectly
+   * replicate the behaviour of the std C11 methods */
   #define atomic_load(var) *(var)
   #define atomic_store(var, v) (*var = v)
-  #define atomic_fetch_add(var, v) InterlockedAdd((volatile LONG *)(var), v)
+  #define atomic_fetch_add(var, v) (InterlockedAdd((volatile LONG *)(var), v) - v)
   #define atomic_fetch_and(var, v) InterlockedAnd((volatile LONG *)(var), v)
-  #define atomic_fetch_sub(var, v) InterlockedAdd((volatile LONG *)(var), -(v))
+  #define atomic_fetch_sub(var, v) (InterlockedAdd((volatile LONG *)(var), -(v)) + v)
   #define atomic_exchange(var, v) InterlockedExchange((volatile LONG *)(var), v)
 
 #else
@@ -65,22 +68,22 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 
   static inline void _LGMP_LOCK(_Atomic(uint32_t) * lock)
   {
-    uint32_t expected = 0; \
-    while (!atomic_compare_exchange_weak_explicit(lock, &expected, 1, \
-      memory_order_acquire, memory_order_relaxed)) { expected = 0; } \
+    uint32_t expected = 0;
+    while (!atomic_compare_exchange_strong(lock, &expected, 1)) {
+      expected = 0;
+    }
   }
   #define LGMP_LOCK(lock) _LGMP_LOCK(&(lock))
 
   static inline bool _LGMP_TRY_LOCK(_Atomic(uint32_t) * lock)
   {
     uint32_t expected = 0;
-    return atomic_compare_exchange_weak_explicit(lock, &expected, 1,
-      memory_order_acquire, memory_order_relaxed);
+    return atomic_compare_exchange_strong(lock, &expected, 1);
   }
   #define LGMP_TRY_LOCK(lock) _LGMP_TRY_LOCK(&(lock))
 
   #define LGMP_UNLOCK(lock) \
-    atomic_fetch_and_explicit(&(lock), ~1u, memory_order_release)
+    atomic_store(&(lock), 0);
 #endif
 
 #define LGMP_QUEUE_LOCK(hq) LGMP_LOCK(hq->lock)
