@@ -428,7 +428,7 @@ LGMP_STATUS lgmpHostGetClientIDs(PLGMPHostQueue queue, uint32_t clientIDs[32],
   {
     const uint32_t bit = 1U << i;
     if (!(LGMP_SUBS_ON(subs) & bit) ||
-        ((LGMP_SUBS_BAD(subs) & bit) && now > hq->timeout[bit]))
+        ((LGMP_SUBS_BAD(subs) & bit) && now > hq->timeout[i]))
       continue;
 
     clientIDs[(*count)++] = hq->clientID[i];
