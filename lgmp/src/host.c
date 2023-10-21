@@ -121,6 +121,7 @@ void lgmpHostFree(PLGMPHost * host)
   if (!*host)
     return;
 
+  free((*host)->udata);
   free(*host);
   *host = NULL;
 }
