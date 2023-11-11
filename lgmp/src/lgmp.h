@@ -46,6 +46,8 @@ inline static uint64_t lgmpGetClockMS(void)
   {
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&start);
+    if (freq.QuadPart == 0)
+      abort();
   }
 
   LARGE_INTEGER time;
