@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+
+import datetime
+import fnmatch
+import os
+import re
+import subprocess
+from textwrap import wrap
+
+PROJECT = os.path.dirname(__file__)
+EXTENSIONS = ('.c', '.cpp', '.h', '.nsi', '.rc')
+START_YEAR = 2020
+CURRENT_YEAR = datetime.date.today().year
+
+reignore = re.compile('^vendor/|.*/shader/|.*/d3d12.h$')
+recopyright = re.compile(r'\A/\*.*?\*/\s+', re.DOTALL)
+
+project_name = 'LGMP - Looking Glass Memory Protocol'
+copyright = f'Copyright © {START_YEAR}-{CURRENT_YEAR} Geoffrey McRae <geoff@hostfission.com>'
+project_url = 'https://github.com/gnif/LGMP'
+header = [project_name, copyright, project_url]
+
+paragraphs = ['''\
+This program is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 2 of the License, or (at your option)
+any later version.''',
+'''\
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+more details.''',
+'''\
+You should have received a copy of the GNU General Public License along
+with this program; if not, write to the Free Software Foundation, Inc., 59
+Temple Place, Suite 330, Boston, MA 02111-1307 USA''']
+
+
+def make_comment_block():
+    lines = ['/**']
+    lines += [' * ' + line for line in header]
+
+    for paragraph in paragraphs:
+        lines.append(' *')
+        lines += wrap(paragraph, width=78, initial_indent=' * ', subsequent_indent=' * ')
+
+    lines.append(' */')
+    return '\n'.join(lines) + '\n\n'
+
+
+def gen_c_literal():
+    lines = [''] + header
+    for paragraph in paragraphs:
+        lines.append('')
+        lines += wrap(paragraph, width=79)
+    lines.append('')
+    return '\n'.join(f'    "{line}\\n"' for line in lines) + '\n'
+
+
+def update_c_style(file, copyright):
+    print(f'Updating copyright for {file}...')
+    with open(file, encoding='utf-8') as f:
+        data = recopyright.sub('', f.read())
+    with open(file, 'w', encoding='utf-8') as f:
+        f.write(copyright)
+        f.write(data)
+
+def appstring_license():
+    lines = []
+    for paragraph in paragraphs:
+        paragraph = wrap(paragraph, width=75)
+        for line in paragraph[:-1]:
+            lines.append(f'  "{line} "')
+        lines.append(f'  "{paragraph[-1]}\\n"')
+        lines.append(r'  "\n"')
+    lines.pop()
+    lines[-1] = f'{lines[-1][:-3]}";'
+    return lines
+
+def main():
+    comment_block = make_comment_block()
+    files = subprocess.check_output(['git', '-C', PROJECT, 'ls-files', '-z']).decode('utf-8').split('\0')
+    for file in files:
+        if reignore.match(file):
+            continue
+        if file.endswith(EXTENSIONS):
+            update_c_style(os.path.join(PROJECT, file), comment_block)
+
+if __name__ == '__main__':
+    main()
