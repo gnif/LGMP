@@ -26,7 +26,7 @@
 #include "lgmp.h"
 
 #define LGMP_PROTOCOL_MAGIC   0x504d474c
-#define LGMP_PROTOCOL_VERSION 6
+#define LGMP_PROTOCOL_VERSION 7
 #define LGMP_MAX_QUEUES       5
 
 // maximum number of client messages supported
@@ -162,8 +162,8 @@ struct LGMPHeader
   uint32_t magic;
   uint32_t version;
   uint32_t sessionID;
-  _Atomic(uint64_t) timestamp;
   uint32_t numQueues;
+  _Atomic(uint64_t) timestamp;
   struct LGMPHeaderQueue queues[LGMP_MAX_QUEUES];
   uint32_t udataSize;
   uint8_t  udata[0];
