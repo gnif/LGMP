@@ -57,12 +57,15 @@ struct LGMPHost
 
 static void initHeader(PLGMPHost host)
 {
-  host->header->magic     = LGMP_PROTOCOL_MAGIC;
   host->header->timestamp = lgmpGetClockMS();
   host->header->version   = LGMP_PROTOCOL_VERSION;
   host->header->numQueues = host->numQueues;
   host->header->udataSize = host->udataSize;
   memcpy(host->header->udata, host->udata, host->udataSize);
+
+  // this must be set last to ensure a client doesn't read invalid data before
+  // we're ready
+  host->header->magic = LGMP_PROTOCOL_MAGIC;
 }
 
 LGMP_STATUS lgmpHostInit(void *mem, const uint32_t size, PLGMPHost * result,
