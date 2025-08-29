@@ -152,10 +152,10 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
     return LGMP_ERR_INVALID_ARGUMENT;
   uint32_t numMessages = config.numMessages;
 
-  const size_t   msgBytes     = sizeof(struct LGMPHeaderMessage) * numMessages;
+  const uint32_t msgBytes     = sizeof(struct LGMPHeaderMessage) * numMessages;
   const uint32_t startAligned = ALIGN_TO(host->nextFree, CACHELINE);
-  const size_t   pad          = startAligned - host->nextFree;
-  const size_t   needed       = pad + ALIGN_TO(msgBytes, CACHELINE);
+  const uint32_t pad          = startAligned - host->nextFree;
+  const uint32_t needed       = pad + ALIGN_TO(msgBytes, CACHELINE);
   if (host->avail < needed)
     return LGMP_ERR_NO_SHARED_MEM;
 
@@ -262,11 +262,10 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
       const uint32_t next = (hq->start + 1) & mask;
       LGMP_PREFETCH_R(&messages[hq->start], 2);
       LGMP_PREFETCH_R(&messages[next],      2);
-      if (LGMP_PREFETCH_DIST >= 2)
-      {
-        uint32_t n2 = (next + 1) & mask;
-        LGMP_PREFETCH_R(&messages[n2], 1);
-      }
+#if (LGMP_PREFETCH_DIST >= 2)
+      uint32_t n2 = (next + 1) & mask;
+      LGMP_PREFETCH_R(&messages[n2], 1);
+#endif
 
       struct LGMPHeaderMessage *msg = &messages[hq->start];
       uint32_t pend = atomic_load_explicit(&msg->pendingSubs,
@@ -449,11 +448,10 @@ LGMP_STATUS lgmpHostReadData(PLGMPHostQueue queue, void * restrict data,
   queue->cMsgPos = (queue->cMsgPos + 1) & (LGMP_MSGS_MAX - 1);
 
   LGMP_PREFETCH_R(&hq->cMsgs[queue->cMsgPos], 2);
-  if (LGMP_PREFETCH_DIST >= 2)
-  {
-    uint32_t n2 = (queue->cMsgPos + 1) & (LGMP_MSGS_MAX - 1);
-    LGMP_PREFETCH_R(&hq->cMsgs[n2], 1);
-  }
+#if (LGMP_PREFETCH_DIST >= 2)
+  uint32_t n2 = (queue->cMsgPos + 1) & (LGMP_MSGS_MAX - 1);
+  LGMP_PREFETCH_R(&hq->cMsgs[n2], 1);
+#endif
 
   memcpy(data, msg->data, msg->size);
   *size = msg->size;
