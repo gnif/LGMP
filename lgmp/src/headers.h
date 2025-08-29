@@ -26,11 +26,11 @@
 #include "lgmp.h"
 
 #define LGMP_PROTOCOL_MAGIC   0x504d474c
-#define LGMP_PROTOCOL_VERSION 7
+#define LGMP_PROTOCOL_VERSION 8
 #define LGMP_MAX_QUEUES       5
 
 // maximum number of client messages supported
-#define LGMP_MSGS_MAX  10
+#define LGMP_MSGS_MAX  16
 
 #ifdef _MSC_VER
   #define LGMP_LOCK_INIT(lock) \
@@ -57,6 +57,15 @@
   #define atomic_fetch_sub(var, v) (InterlockedAdd((volatile LONG *)(var), -(v)) + v)
   #define atomic_exchange(var, v) InterlockedExchange((volatile LONG *)(var), v)
 
+  #define atomic_load_explicit(var, x) atomic_load(var)
+  #define atomic_store_explicit(var, v, x) atomic_store(var, v)
+  #define atomic_fetch_add_explicit(var, v, x) atomic_fetch_add(var, v)
+  #define atomic_fetch_and_explicit(var, v, x) atomic_fetch_and(var, v)
+  #define atomic_fetch_sub_explicit(var, v, x) atomic_fetch_sub(var, v)
+  #define atomic_exchange_explicit(var, v, x) atomic_exchange(var, v)
+
+  #define __builtin_prefetch(...) do {} while(0)
+
 #else
   #include <stdatomic.h>
 
@@ -67,11 +76,25 @@
   #define LGMP_LOCK_INIT(lock) \
     atomic_store(&(lock), 0);
 
+  #if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
+    #include <immintrin.h>
+    #define LGMP_CPU_RELAX() _mm_pause()
+  #else
+    #define LGMP_CPU_RELAX() do {} while (0)
+  #endif
+
   static inline void _LGMP_LOCK(_Atomic(uint32_t) * lock)
   {
     uint32_t expected = 0;
-    while (!atomic_compare_exchange_strong(lock, &expected, 1)) {
-      expected = 0;
+    int spins = 0;
+    for (;;)
+    {
+      if (atomic_compare_exchange_weak_explicit(lock, &expected, 1,
+            memory_order_acquire, memory_order_relaxed))
+        break;
+
+      LGMP_CPU_RELAX();
+      if ((++spins & 0xFF) == 0) { /* mild backoff */ }
     }
   }
   #define LGMP_LOCK(lock) _LGMP_LOCK(&(lock))
@@ -79,12 +102,22 @@
   static inline bool _LGMP_TRY_LOCK(_Atomic(uint32_t) * lock)
   {
     uint32_t expected = 0;
-    return atomic_compare_exchange_strong(lock, &expected, 1);
+    return atomic_compare_exchange_strong_explicit(lock, &expected, 1,
+        memory_order_acquire, memory_order_relaxed);
   }
   #define LGMP_TRY_LOCK(lock) _LGMP_TRY_LOCK(&(lock))
 
   #define LGMP_UNLOCK(lock) \
-    atomic_store(&(lock), 0);
+    atomic_store_explicit(&(lock), 0, memory_order_release);
+
+#endif
+
+#if defined(__GNUC__)
+  #define likely(x)   __builtin_expect(!!(x), 1)
+  #define unlikely(x) __builtin_expect(!!(x), 0)
+#else
+  #define likely(x)   (x)
+  #define unlikely(x) (x)
 #endif
 
 #define LGMP_QUEUE_LOCK(hq) LGMP_LOCK(hq->lock)
