@@ -245,23 +245,29 @@ LGMP_STATIC_ASSERT((offsetof(struct LGMPHeaderQueue, cMsgLock) & 63) == 0,
 
 struct LGMPHeader
 {
-  /* place timestamp on its own cacheline (first) */
-  _Atomic(uint64_t) timestamp;
+  /* ---- Line 0: timestamp + explicit pad to 64B ---- */
+  _Atomic(uint64_t) timestamp;     /* 8 */
+  uint8_t           _padTs[56];    /* 56 -> total 64B */
+
+  /* ---- Line 1+: queues start 64B-aligned ---- */
+  struct LGMPHeaderQueue queues[LGMP_MAX_QUEUES];
+
+  /* metadata (read-mostly), still before flexible array */
   uint32_t magic;
   uint32_t version;
   uint32_t sessionID;
   uint32_t numQueues;
-  struct LGMPHeaderQueue queues[LGMP_MAX_QUEUES];
   uint32_t udataSize;
+
+  /* must be last */
   uint8_t  udata[0];
 }
 ALIGNED_64;
 
+LGMP_STATIC_ASSERT((offsetof(struct LGMPHeader, timestamp) & 63) == 0,
+                   "LGMPHeader.timestamp must begin a cache line");
 LGMP_STATIC_ASSERT((offsetof(struct LGMPHeader, queues) & 63) == 0,
                    "LGMPHeader.queues must be 64B-aligned");
-LGMP_STATIC_ASSERT(offsetof(struct LGMPHeader, udataSize) >
-                   offsetof(struct LGMPHeader, queues),
-                   "LGMPHeader.udataSize must follow queues[]");
 
 #ifdef _MSC_VER
   #pragma warning(pop)
