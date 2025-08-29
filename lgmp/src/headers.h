@@ -178,6 +178,7 @@ ALIGNED_16;
 struct LGMPClientMessage
 {
   uint32_t size;
+  uint32_t _padSize[3];
   uint8_t  data[LGMP_MSGS_SIZE];
 }
 ALIGNED_16;
@@ -215,8 +216,9 @@ struct LGMPHeaderQueue
   uint32_t numMessages;       /* ring size (+1 sentinel) */
   uint32_t messagesOffset;    /* byte offset to messages[] from SHM base */
   uint32_t maxTime;           /* ms timeout for subs */
+  uint32_t _padRO[2];         /* pad to 64 */
 
-  ALIGNED_16 struct LGMPClientMessage cMsgs[LGMP_MSGS_MAX];
+  struct LGMPClientMessage cMsgs[LGMP_MSGS_MAX];
 }
 ALIGNED_64;
 
