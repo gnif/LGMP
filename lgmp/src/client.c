@@ -26,7 +26,6 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 #define LGMP_HEARTBEAT_TIMEOUT 1000
 
@@ -118,7 +117,7 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
       break;
     }
     timestamp = atomic_load_explicit(&header->timestamp, memory_order_relaxed);
-    usleep(1000);
+    lgmpSleepMs(1);
   }
   while(lgmpGetClockMS() < end);
 

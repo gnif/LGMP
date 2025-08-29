@@ -125,6 +125,7 @@ int main(int argc, char * argv[])
   }
 
   printf("Session valid, clientID: %x\n", clientID);
+  printf("udataSize: %d\n", udataSize);
 
   PLGMPClientQueue queue;
   while((status = lgmpClientSubscribe(client, 0, &queue)) != LGMP_OK)

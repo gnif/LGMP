@@ -30,6 +30,10 @@
 #include <time.h>
 #endif
 
+#ifndef _MSC_VER
+#include <unistd.h>
+#endif
+
 struct LGMPMemory
 {
   PLGMPHost    host;
@@ -60,6 +64,15 @@ inline static uint64_t lgmpGetClockMS(void)
   if (clock_gettime(CLOCK_MONOTONIC, &tsnow) != 0)
     return 0;
   return (uint64_t)tsnow.tv_sec * 1000ULL + (uint64_t)tsnow.tv_nsec / 1000000ULL;
+#endif
+}
+
+inline static void lgmpSleepMs(unsigned ms)
+{
+#ifdef _MSC_VER
+  Sleep(ms);
+#else
+  usleep(ms * 1000);
 #endif
 }
 
