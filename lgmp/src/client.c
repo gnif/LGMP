@@ -315,11 +315,10 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
 
     LGMP_PREFETCH_R(&messages[last], 2);
     LGMP_PREFETCH_R(&messages[next], 2);
-    if (LGMP_PREFETCH_DIST >= 2)
-    {
-      uint32_t n2 = (next + 1) & mask;
-      LGMP_PREFETCH_R(&messages[n2], 1);
-    }
+#if (LGMP_PREFETCH_DIST >= 2)
+    uint32_t n2 = (next + 1) & mask;
+    LGMP_PREFETCH_R(&messages[n2], 1);
+#endif
 
     // turn off the pending bit for our queue
     struct LGMPHeaderMessage *msg = &messages[last];
