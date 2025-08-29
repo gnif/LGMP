@@ -26,6 +26,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #define LGMP_HEARTBEAT_TIMEOUT 1000
 
@@ -107,7 +108,21 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
       memory_order_relaxed);
 #ifndef LGMP_REALACY
   // check the host's timestamp is updating
-  if (timestamp == client->hosttime)
+  const uint64_t end = lgmpGetClockMS() + 500;
+  bool valid = false;
+  do
+  {
+    if (timestamp != client->hosttime)
+    {
+      valid = true;
+      break;
+    }
+    timestamp = atomic_load_explicit(&header->timestamp, memory_order_relaxed);
+    usleep(1000);
+  }
+  while(lgmpGetClockMS() < end);
+
+  if (!valid)
     return LGMP_ERR_INVALID_SESSION;
 #endif
 
