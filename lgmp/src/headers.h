@@ -161,6 +161,11 @@
 #define LGMP_SUBS_CLEAR(x, cl)   ((uint32_t)((x) & ~(((uint32_t)(cl)) | (((uint32_t)(cl)) << 16))))
 #define LGMP_SUBS_SET(x, st)     ((uint32_t)((x) | (((uint32_t)(st)) << 16)))
 
+/* Ensure default packing on MSVC so external headers cannot break our SHM ABI */
+#if defined(_MSC_VER)
+#  pragma pack(push, 8)
+#endif
+
 struct LGMPHeaderMessage
 {
   uint32_t udata;
@@ -252,8 +257,15 @@ struct LGMPHeader
 }
 ALIGNED_64;
 
+LGMP_STATIC_ASSERT((offsetof(struct LGMPHeader, queues) & 63) == 0,
+                   "LGMPHeader.queues must be 64B-aligned");
+LGMP_STATIC_ASSERT(offsetof(struct LGMPHeader, udataSize) >
+                   offsetof(struct LGMPHeader, queues),
+                   "LGMPHeader.udataSize must follow queues[]");
+
 #ifdef _MSC_VER
   #pragma warning(pop)
+  #pragma pack(pop)
 #endif
 
 #endif
