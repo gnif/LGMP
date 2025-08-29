@@ -155,7 +155,7 @@ int main(int argc, char * argv[])
         hq->cMsgWPos,
         hq->cMsgAvail);
 
-      for(int i = 0; i < 32; ++i)
+      for(int i = 0; i < LGMP_MAX_CLIENTS; ++i)
         printw("  client %-2d     = id:%x, timeout:%u\n",
           i,
           hq->clientID[i],

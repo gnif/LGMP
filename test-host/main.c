@@ -70,7 +70,7 @@ int main(int argc, char * argv[])
   const struct LGMPQueueConfig conf =
   {
     .queueID     = 0,
-    .numMessages = 10,
+    .numMessages = 16,
     .subTimeout  = 1000
   };
 
