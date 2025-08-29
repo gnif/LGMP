@@ -28,9 +28,7 @@
 #include "lgmp.h"
 
 #define LGMP_PROTOCOL_MAGIC   0x504d474c
-#define LGMP_PROTOCOL_VERSION 9
-#define LGMP_MAX_QUEUES       5
-#define LGMP_MAX_CLIENTS      8
+#define LGMP_PROTOCOL_VERSION 10
 
 // maximum number of client messages supported
 #define LGMP_MSGS_MAX  16
@@ -77,8 +75,6 @@
   #define atomic_fetch_and_explicit(var, v, x) atomic_fetch_and(var, v)
   #define atomic_fetch_sub_explicit(var, v, x) atomic_fetch_sub(var, v)
   #define atomic_exchange_explicit(var, v, x) atomic_exchange(var, v)
-
-  #define __builtin_prefetch(...) do {} while(0)
 
 #else
   #include <stdatomic.h>
@@ -133,6 +129,25 @@
   #define likely(x)   (x)
   #define unlikely(x) (x)
 #endif
+
+#if defined(_MSC_VER)
+  #include <immintrin.h>
+  #ifndef _MM_HINT_NTA
+    #define _MM_HINT_NTA 0
+    #define _MM_HINT_T0  3
+    #define _MM_HINT_T1  2
+    #define _MM_HINT_T2  1
+  #endif
+  /* map 0..3 to NTA..T0 */
+  #define LGMP_PREFETCH_R(p,loc) _mm_prefetch((const char*)(p), ((loc)==0)?_MM_HINT_NTA:((loc)==1)?_MM_HINT_T2:((loc)==2)?_MM_HINT_T1:_MM_HINT_T0)
+  #define LGMP_PREFETCH_W(p,loc) _mm_prefetch((const char*)(p), ((loc)==0)?_MM_HINT_NTA:((loc)==1)?_MM_HINT_T2:((loc)==2)?_MM_HINT_T1:_MM_HINT_T0)
+#else
+  #define LGMP_PREFETCH_R(p,loc) __builtin_prefetch((p), 0, (loc))
+  #define LGMP_PREFETCH_W(p,loc) __builtin_prefetch((p), 1, (loc))
+#endif
+#define LGMP_PREFETCH_DIST 2
+
+#define LGMP_IS_POW2(x) ((x) && (((x) & ((x) - 1)) == 0))
 
 #define LGMP_QUEUE_LOCK(hq) LGMP_LOCK(hq->lock)
 #define LGMP_QUEUE_TRY_LOCK(hq) LGMP_TRY_LOCK(hq->lock)
@@ -207,6 +222,9 @@ ALIGNED_64;
 #endif
 
 /* Sanity checks: keep the hot blocks on their own lines */
+/* ring invariants */
+LGMP_STATIC_ASSERT((LGMP_MSGS_MAX & (LGMP_MSGS_MAX - 1)) == 0,
+                   "LGMP_MSGS_MAX must be power-of-two");
 LGMP_STATIC_ASSERT((offsetof(struct LGMPHeaderQueue, position) & 63) == 0,
                    "position must begin a cache line");
 LGMP_STATIC_ASSERT((offsetof(struct LGMPHeaderQueue, lock) & 63) == 0,

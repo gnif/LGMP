@@ -147,8 +147,10 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   if (host->numQueues == LGMP_MAX_QUEUES)
     return LGMP_ERR_NO_QUEUES;
 
-  // + 1 for end marker
-  uint32_t numMessages = config.numMessages + 1;
+  /* Require power-of-two ring size (no sentinel needed when using count) */
+  if (!LGMP_IS_POW2(config.numMessages) || config.numMessages < 2)
+    return LGMP_ERR_INVALID_ARGUMENT;
+  uint32_t numMessages = config.numMessages;
 
   const size_t   msgBytes     = sizeof(struct LGMPHeaderMessage) * numMessages;
   const uint32_t startAligned = ALIGN_TO(host->nextFree, CACHELINE);
@@ -254,12 +256,17 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
     }
 
     uint32_t subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
+    const uint32_t mask = hq->numMessages - 1;
     for(;;)
     {
-      const uint32_t next =
-        (hq->start + 1 == hq->numMessages) ? 0 : hq->start + 1;
-      __builtin_prefetch(&messages[hq->start], 0, 1);
-      __builtin_prefetch(&messages[next],      0, 1);
+      const uint32_t next = (hq->start + 1) & mask;
+      LGMP_PREFETCH_R(&messages[hq->start], 2);
+      LGMP_PREFETCH_R(&messages[next],      2);
+      if (LGMP_PREFETCH_DIST >= 2)
+      {
+        uint32_t n2 = (next + 1) & mask;
+        LGMP_PREFETCH_R(&messages[n2], 1);
+      }
 
       struct LGMPHeaderMessage *msg = &messages[hq->start];
       uint32_t pend = atomic_load_explicit(&msg->pendingSubs,
@@ -286,10 +293,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
         break;
 
       // message finished
-      if (hq->start + 1 == hq->numMessages)
-        hq->start = 0;
-      else
-        ++hq->start;
+      hq->start = (hq->start + 1) & mask;
 
       // decrement the queue count and break out if there are no more messages
       if (atomic_fetch_sub_explicit(&queue->hq->count, 1,
@@ -393,9 +397,9 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
     return LGMP_OK;
   }
 
-  // we should never fully fill the buffer
-  if (unlikely(atomic_load_explicit(&queue->hq->count,
-        memory_order_relaxed) == hq->numMessages - 1))
+  // full when count == numMessages
+  if (unlikely(atomic_load_explicit(&hq->count,
+        memory_order_relaxed) == hq->numMessages))
   {
     LGMP_QUEUE_UNLOCK(hq);
     return LGMP_ERR_QUEUE_FULL;
@@ -403,6 +407,11 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
     (queue->host->mem + hq->messagesOffset);
+
+  const uint32_t mask = hq->numMessages - 1;
+  LGMP_PREFETCH_W(&messages[queue->position], 3);
+  uint32_t npos = (queue->position + 1) & mask;
+  LGMP_PREFETCH_W(&messages[npos], 2);
 
   struct LGMPHeaderMessage *msg = &messages[queue->position];
 
@@ -416,8 +425,7 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
     atomic_store_explicit(&hq->msgTimeout, lgmpGetClockMS() + hq->maxTime,
         memory_order_relaxed);
 
-  if (++queue->position == hq->numMessages)
-    queue->position = 0;
+  queue->position = (queue->position + 1) & mask;
 
   atomic_store_explicit(&hq->position, queue->position, memory_order_release);
 
@@ -439,6 +447,13 @@ LGMP_STATUS lgmpHostReadData(PLGMPHostQueue queue, void * restrict data,
 
   struct LGMPClientMessage * msg = &hq->cMsgs[queue->cMsgPos];
   queue->cMsgPos = (queue->cMsgPos + 1) & (LGMP_MSGS_MAX - 1);
+
+  LGMP_PREFETCH_R(&hq->cMsgs[queue->cMsgPos], 2);
+  if (LGMP_PREFETCH_DIST >= 2)
+  {
+    uint32_t n2 = (queue->cMsgPos + 1) & (LGMP_MSGS_MAX - 1);
+    LGMP_PREFETCH_R(&hq->cMsgs[n2], 1);
+  }
 
   memcpy(data, msg->data, msg->size);
   *size = msg->size;

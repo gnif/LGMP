@@ -24,6 +24,9 @@
 // this MUST match the size defined in `src/headers.h`
 #define LGMP_MSGS_SIZE 64
 
+#define LGMP_MAX_QUEUES  5
+#define LGMP_MAX_CLIENTS 8
+
 #ifdef __cplusplus
 extern "C" {
 #endif

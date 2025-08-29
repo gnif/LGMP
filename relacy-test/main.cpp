@@ -22,6 +22,8 @@
 #include <lgmp/client.h>
 #include <relacy/relacy.hpp>
 
+#define NUM_MESSAGES 8
+
 class CLGMPQueueTest
 {
 public:
@@ -41,7 +43,7 @@ public:
     const struct LGMPQueueConfig conf =
     {
       .queueID     = 0,
-      .numMessages = 10,
+      .numMessages = NUM_MESSAGES,
       .subTimeout  = 10000
     };
 
@@ -161,7 +163,7 @@ struct QueueTest : rl::test_suite<QueueTest, 60>
       RL_ASSERT(q.hostProcess());
       LGMP_STATUS status = q.enqueue();
 
-      if (pending == 10)
+      if (pending == NUM_MESSAGES)
         RL_ASSERT(status == LGMP_ERR_QUEUE_FULL);
       else
       {

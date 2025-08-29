@@ -276,6 +276,7 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
   const uint32_t subs = atomic_load(&hq->subs);
+  const uint32_t mask = hq->numMessages - 1;
 
   if (unlikely(LGMP_SUBS_BAD(subs) & bit ||
         hq->clientID[queue->id] != queue->client->id))
@@ -290,8 +291,12 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
   }
 
   uint32_t end = atomic_load_explicit(&hq->position, memory_order_acquire);
-  if (end == queue->position)
-    return LGMP_ERR_QUEUE_EMPTY;
+  if (unlikely(end == queue->position))
+  {
+    uint32_t c = atomic_load_explicit(&hq->count, memory_order_acquire);
+    if (likely(c != hq->numMessages))
+      return LGMP_ERR_QUEUE_EMPTY;
+  }
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
     (queue->client->mem + hq->messagesOffset);
@@ -303,11 +308,18 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
   while(true)
   {
     last = next;
-    if (++next == hq->numMessages)
-      next = 0;
+    next = (next + 1) & mask;
 
     if (next == end)
       break;
+
+    LGMP_PREFETCH_R(&messages[last], 2);
+    LGMP_PREFETCH_R(&messages[next], 2);
+    if (LGMP_PREFETCH_DIST >= 2)
+    {
+      uint32_t n2 = (next + 1) & mask;
+      LGMP_PREFETCH_R(&messages[n2], 1);
+    }
 
     // turn off the pending bit for our queue
     struct LGMPHeaderMessage *msg = &messages[last];
@@ -386,13 +398,22 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
       return LGMP_ERR_INVALID_SESSION;
   }
 
-  if (atomic_load_explicit(&hq->position,
-        memory_order_acquire) == queue->position)
-    return LGMP_ERR_QUEUE_EMPTY;
+  uint32_t end = atomic_load_explicit(&hq->position, memory_order_acquire);
+  if (unlikely(end == queue->position))
+  {
+    uint32_t c = atomic_load_explicit(&hq->count, memory_order_acquire);
+    if (likely(c != hq->numMessages))
+      return LGMP_ERR_QUEUE_EMPTY;
+  }
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
     (queue->client->mem + hq->messagesOffset);
   struct LGMPHeaderMessage *msg = &messages[queue->position];
+
+  LGMP_PREFETCH_R(msg, 3);
+  const uint32_t mask2 = hq->numMessages - 1;
+  uint32_t npos = (queue->position + 1) & mask2;
+  LGMP_PREFETCH_R(&messages[npos], 2);
 
   result->udata = msg->udata;
   result->size  = msg->size;
@@ -420,9 +441,13 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
       return LGMP_ERR_INVALID_SESSION;
   }
 
-  if (unlikely(atomic_load_explicit(&hq->position,
-        memory_order_acquire) == queue->position))
-    return LGMP_ERR_QUEUE_EMPTY;
+  uint32_t end = atomic_load_explicit(&hq->position, memory_order_acquire);
+  if (unlikely(end == queue->position))
+  {
+    uint32_t c = atomic_load_explicit(&hq->count, memory_order_acquire);
+    if (likely(c != hq->numMessages))
+      return LGMP_ERR_QUEUE_EMPTY;
+  }
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
     (queue->client->mem + hq->messagesOffset);
@@ -442,10 +467,8 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
     }
 
     // message finished
-    if (hq->start + 1 == hq->numMessages)
-      hq->start = 0;
-    else
-      ++hq->start;
+    const uint32_t mask = hq->numMessages - 1;
+    hq->start = (hq->start + 1) & mask;
 
     // decrement the count and update the timeout
     uint32_t count = atomic_fetch_sub_explicit(&hq->count, 1,
@@ -468,8 +491,8 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
   }
 
 done:
-  if (++queue->position == hq->numMessages)
-    queue->position = 0;
+  queue->position = (queue->position + 1) & (hq->numMessages - 1);
+  LGMP_PREFETCH_R(&messages[queue->position], 2);
 
   return LGMP_OK;
 }
@@ -503,6 +526,12 @@ LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue,
 
   // get the write position and copy in the data
   uint32_t wpos = atomic_load_explicit(&hq->cMsgWPos, memory_order_relaxed);
+
+  LGMP_PREFETCH_W(&hq->cMsgs[wpos], 3);
+  uint32_t wnext = (wpos + 1) & (LGMP_MSGS_MAX - 1);
+  LGMP_PREFETCH_W(&hq->cMsgs[wnext], 2);
+  LGMP_PREFETCH_R(data, 2);
+
   hq->cMsgs[wpos].size = size;
   memcpy(hq->cMsgs[wpos].data, data, size);
 
