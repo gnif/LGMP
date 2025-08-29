@@ -216,7 +216,7 @@ struct LGMPHeaderQueue
   uint32_t messagesOffset;    /* byte offset to messages[] from SHM base */
   uint32_t maxTime;           /* ms timeout for subs */
 
-  struct LGMPClientMessage cMsgs[LGMP_MSGS_MAX];
+  ALIGNED_16 struct LGMPClientMessage cMsgs[LGMP_MSGS_MAX];
 }
 ALIGNED_64;
 
