@@ -179,7 +179,7 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
 
   // take the queue lock
   LGMP_QUEUE_LOCK(hq);
-  uint64_t subs = atomic_load_explicit(&hq->subs, memory_order_relaxed);
+  uint32_t subs = atomic_load_explicit(&hq->subs, memory_order_relaxed);
 
   // recover subs for reuse that have been flagged as bad and have exceeded the
   // queue timeout
@@ -187,8 +187,8 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
   {
     const uint64_t hosttime = atomic_load_explicit(&client->header->timestamp,
         memory_order_relaxed);
-    uint32_t reap = 0;
-    for(unsigned int id = 0; id < 32; ++id)
+    uint32_t reap = 0u;
+    for(unsigned int id = 0; id < LGMP_MAX_CLIENTS; ++id)
     {
       uint32_t bit = (1U << id);
       if ((LGMP_SUBS_BAD(subs) & bit) && hosttime > hq->timeout[id])
@@ -203,7 +203,8 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
 
   // find the next free queue ID
   unsigned int id = 0;
-  while(id < 32 && ((LGMP_SUBS_ON(subs) | LGMP_SUBS_BAD(subs)) & (1U << id)))
+  while (id < LGMP_MAX_CLIENTS &&
+      ((LGMP_SUBS_ON(subs) | LGMP_SUBS_BAD(subs)) & (1U << id)))
     ++id;
 
   // check if full
@@ -215,7 +216,7 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
 
   hq->timeout [id] = 0;
   hq->clientID[id] = client->id;
-  subs = LGMP_SUBS_SET(subs, 1ULL << id);
+  subs = LGMP_SUBS_SET(subs, 1U << id);
   atomic_store_explicit(&hq->subs, subs, memory_order_release);
   atomic_fetch_add_explicit(&hq->newSubCount, 1, memory_order_relaxed);
 
@@ -243,7 +244,7 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPClientQueue * result)
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
 
-  uint64_t subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
+  uint32_t subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
   if (LGMP_SUBS_BAD(subs) & bit)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
@@ -274,7 +275,7 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
 
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
-  const uint64_t subs = atomic_load(&hq->subs);
+  const uint32_t subs = atomic_load(&hq->subs);
 
   if (unlikely(LGMP_SUBS_BAD(subs) & bit ||
         hq->clientID[queue->id] != queue->client->id))
@@ -372,7 +373,7 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
 
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
-  const uint64_t subs = atomic_load(&hq->subs);
+  const uint32_t subs = atomic_load(&hq->subs);
 
   if (unlikely(LGMP_SUBS_BAD(subs) & bit))
     return LGMP_ERR_QUEUE_TIMEOUT;
@@ -406,7 +407,7 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
 
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
-  const uint64_t subs = atomic_load(&hq->subs);
+  const uint32_t subs = atomic_load(&hq->subs);
 
   if (unlikely(LGMP_SUBS_BAD(subs) & bit))
     return LGMP_ERR_QUEUE_TIMEOUT;
@@ -478,7 +479,7 @@ LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue,
 {
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
-  const uint64_t subs = atomic_load(&hq->subs);
+  const uint32_t subs = atomic_load(&hq->subs);
 
   if (unlikely(size > LGMP_MSGS_SIZE))
     return LGMP_ERR_INVALID_SIZE;
@@ -527,7 +528,7 @@ LGMP_STATUS lgmpClientGetSerial(PLGMPClientQueue queue, uint32_t * serial)
 {
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
-  const uint64_t subs = atomic_load(&hq->subs);
+  const uint32_t subs = atomic_load(&hq->subs);
 
   if (unlikely(LGMP_SUBS_BAD(subs) & bit))
     return LGMP_ERR_QUEUE_TIMEOUT;

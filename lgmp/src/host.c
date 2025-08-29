@@ -28,6 +28,8 @@
 #include <stdlib.h>
 
 #define ALIGN(x) ((x + (3)) & ~(3))
+#define ALIGN_TO(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
+#define CACHELINE 64u
 
 struct LGMPHostQueue
 {
@@ -148,7 +150,10 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   // + 1 for end marker
   uint32_t numMessages = config.numMessages + 1;
 
-  const size_t needed = sizeof(struct LGMPHeaderMessage) * numMessages;
+  const size_t   msgBytes     = sizeof(struct LGMPHeaderMessage) * numMessages;
+  const uint32_t startAligned = ALIGN_TO(host->nextFree, CACHELINE);
+  const size_t   pad          = startAligned - host->nextFree;
+  const size_t   needed       = pad + ALIGN_TO(msgBytes, CACHELINE);
   if (host->avail < needed)
     return LGMP_ERR_NO_SHARED_MEM;
 
@@ -159,11 +164,16 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   struct LGMPHeaderQueue * hq = &host->header->queues[idx];
   hq->queueID        = config.queueID;
   hq->numMessages    = numMessages;
-  hq->newSubCount    = 0;
+
+  /* message ring placement, 64B aligned */
+  hq->messagesOffset = startAligned;
+  host->nextFree     = startAligned;
+  host->avail       -= pad;
+
+  atomic_store(&hq->newSubCount, 0);
   LGMP_LOCK_INIT(hq->lock);
-  hq->subs           = 0;
+  atomic_store(&hq->subs, 0);
   hq->position       = 0;
-  hq->messagesOffset = host->nextFree;
   hq->start          = 0;
   atomic_store(&hq->msgTimeout, 0);
   hq->maxTime        = config.subTimeout;
@@ -180,8 +190,9 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   queue->position   = 0;
   queue->hq         = hq;
 
-  host->avail    -= ALIGN(needed);
-  host->nextFree += ALIGN(needed);
+  /* consume the aligned region */
+  host->avail    -= ALIGN_TO(msgBytes, CACHELINE);
+  host->nextFree += ALIGN_TO(msgBytes, CACHELINE);
 
   ++host->header->numQueues;
   return LGMP_OK;
@@ -242,7 +253,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
       continue;
     }
 
-    uint64_t subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
+    uint32_t subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
     for(;;)
     {
       const uint32_t next =
@@ -254,14 +265,14 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
       uint32_t pend = atomic_load_explicit(&msg->pendingSubs,
           memory_order_acquire) & LGMP_SUBS_ON(subs);
 
-      const uint32_t newBadSubs = pend & ~LGMP_SUBS_BAD(subs);
+      const uint32_t newBadSubs = pend & ~((uint32_t)LGMP_SUBS_BAD(subs));
       if (unlikely(newBadSubs && now > atomic_load_explicit(&hq->msgTimeout,
             memory_order_relaxed)))
       {
         // reset garbage collection timeout for new bad subs
         subs = LGMP_SUBS_OR_BAD(subs, newBadSubs);
         const uint64_t timeout = now + hq->maxTime;
-        for(unsigned int id = 0; id < 32; ++id)
+        for(unsigned int id = 0; id < LGMP_MAX_CLIENTS; ++id)
           if (newBadSubs & (1U << id))
             hq->timeout[id] = timeout;
 
@@ -366,7 +377,7 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
   struct LGMPHeaderQueue *hq = queue->hq;
 
   // get the subscribers
-  uint64_t subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
+  uint32_t subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
   uint32_t pend = LGMP_SUBS_ON(subs) & ~(LGMP_SUBS_BAD(subs));
 
   // if nobody has subscribed there is no point in posting the message
@@ -375,7 +386,7 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
 
   LGMP_QUEUE_LOCK(hq);
   subs = atomic_load_explicit(&hq->subs, memory_order_relaxed);
-  pend = LGMP_SUBS_ON(subs) & ~(LGMP_SUBS_BAD(subs));
+  pend = LGMP_SUBS_ON(subs) & ~((uint32_t)LGMP_SUBS_BAD(subs));
   if (unlikely(!pend))
   {
     LGMP_QUEUE_UNLOCK(hq);
@@ -454,10 +465,10 @@ LGMP_STATUS lgmpHostGetClientIDs(PLGMPHostQueue queue, uint32_t clientIDs[32],
 
   LGMP_QUEUE_LOCK(hq);
   const uint64_t now = lgmpGetClockMS();
-  uint64_t subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
+  uint32_t subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
 
   *count = 0;
-  for(int i = 0; i < 32; ++i)
+  for(int i = 0; i < LGMP_MAX_CLIENTS; ++i)
   {
     const uint32_t bit = 1U << i;
     if (!(LGMP_SUBS_ON(subs) & bit) ||
