@@ -338,7 +338,7 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
 #endif
 
     // turn off the pending bit for our queue
-    struct LGMPHeaderMessage *msg = &messages[last];
+    msg = &messages[last];
 
     // turn off the pending bit for our queue
     if (((atomic_fetch_and_explicit(&msg->pendingSubs, ~bit,
