@@ -380,10 +380,16 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
   // release the lock if we have it
   if (likely(locked))
   {
-    // update the timeout
-    atomic_store_explicit(&hq->msgTimeout,
-        atomic_load_explicit(&queue->header->timestamp, memory_order_relaxed)
-        + hq->maxTime, memory_order_relaxed);
+    // update the timeout if we need to. We hold the lock so there is no need to
+    // use a comapre exchange.
+    uint64_t oldTimeout = atomic_load_explicit(&hq->msgTimeout,
+        msg_order_relaxed);
+    uint64_t newTimeout = atomic_load_explicit(&queue->header->timestamp,
+        memory_order_relaxed) + hq->maxTime;
+
+    if (newTimeout > oldTimeout)
+      atomic_store_explicit(&hq->msgTimeout, newTimeout, memory_order_relaxed);
+
     LGMP_QUEUE_UNLOCK(hq);
   }
 
@@ -495,10 +501,15 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
       return LGMP_ERR_CORRUPTED;
     }
 
-    atomic_store_explicit(&hq->msgTimeout,
-      atomic_load_explicit(&queue->header->timestamp,
-        memory_order_relaxed) + hq->maxTime,
-      memory_order_relaxed);
+    // update the timeout if we need to. We hold the lock so there is no need to
+    // use a comapre exchange.
+    uint64_t oldTimeout = atomic_load_explicit(&hq->msgTimeout,
+        msg_order_relaxed);
+    uint64_t newTimeout = atomic_load_explicit(&queue->header->timestamp,
+        memory_order_relaxed) + hq->maxTime;
+
+    if (newTimeout > oldTimeout)
+      atomic_store_explicit(&hq->msgTimeout, newTimeout, memory_order_relaxed);
 
     LGMP_QUEUE_UNLOCK(hq);
   }
