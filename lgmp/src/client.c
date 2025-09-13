@@ -383,7 +383,7 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
     // update the timeout if we need to. We hold the lock so there is no need to
     // use a comapre exchange.
     uint64_t oldTimeout = atomic_load_explicit(&hq->msgTimeout,
-        msg_order_relaxed);
+        memory_order_relaxed);
     uint64_t newTimeout = atomic_load_explicit(&queue->header->timestamp,
         memory_order_relaxed) + hq->maxTime;
 
@@ -504,7 +504,7 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
     // update the timeout if we need to. We hold the lock so there is no need to
     // use a comapre exchange.
     uint64_t oldTimeout = atomic_load_explicit(&hq->msgTimeout,
-        msg_order_relaxed);
+        memory_order_relaxed);
     uint64_t newTimeout = atomic_load_explicit(&queue->header->timestamp,
         memory_order_relaxed) + hq->maxTime;
 
