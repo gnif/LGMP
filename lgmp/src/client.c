@@ -304,16 +304,19 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
       return LGMP_ERR_INVALID_SESSION;
   }
 
-  uint32_t end = atomic_load_explicit(&hq->position, memory_order_acquire);
-  if (unlikely(end == queue->position))
-  {
-    uint32_t c = atomic_load_explicit(&hq->count, memory_order_acquire);
-    if (likely(c != hq->numMessages))
-      return LGMP_ERR_QUEUE_EMPTY;
-  }
-
+  const uint32_t end = atomic_load_explicit(&hq->position, memory_order_acquire);
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
     (queue->client->mem + hq->messagesOffset);
+  struct LGMPHeaderMessage *msg = &messages[queue->position];
+
+  if (unlikely(end == queue->position))
+  {
+    // Only proceed if THIS client still has the pending bit on the current slot.
+    const uint32_t pend = atomic_load_explicit(&msg->pendingSubs,
+        memory_order_acquire);
+    if ((pend & bit) == 0)
+      return LGMP_ERR_QUEUE_EMPTY;
+  }
 
   uint32_t next = queue->position;
   uint32_t last;
@@ -417,17 +420,19 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
       return LGMP_ERR_INVALID_SESSION;
   }
 
-  uint32_t end = atomic_load_explicit(&hq->position, memory_order_acquire);
-  if (unlikely(end == queue->position))
-  {
-    uint32_t c = atomic_load_explicit(&hq->count, memory_order_acquire);
-    if (likely(c != hq->numMessages))
-      return LGMP_ERR_QUEUE_EMPTY;
-  }
-
+  const uint32_t end = atomic_load_explicit(&hq->position, memory_order_acquire);
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
     (queue->client->mem + hq->messagesOffset);
   struct LGMPHeaderMessage *msg = &messages[queue->position];
+
+  if (unlikely(end == queue->position))
+  {
+    // Only proceed if THIS client still has the pending bit on the current slot.
+    const uint32_t pend = atomic_load_explicit(&msg->pendingSubs,
+        memory_order_acquire);
+    if ((pend & bit) == 0)
+      return LGMP_ERR_QUEUE_EMPTY;
+  }
 
   LGMP_PREFETCH_R(msg, 3);
   const uint32_t mask2 = hq->numMessages - 1;
