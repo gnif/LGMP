@@ -21,6 +21,8 @@
 #ifndef LGMP_LGMP_H
 #define LGMP_LGMP_H
 
+#define LGMP_PROTOCOL_VERSION 10
+
 // this MUST match the size defined in `src/headers.h`
 #define LGMP_MSGS_SIZE 64
 

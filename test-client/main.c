@@ -117,8 +117,8 @@ int main(int argc, char * argv[])
   uint32_t   udataSize;
   uint8_t  * udata;
   uint32_t   clientID;
-  while((status = lgmpClientSessionInit(client, &udataSize, &udata, &clientID))
-      != LGMP_OK)
+  while((status = lgmpClientSessionInit(client, &udataSize, &udata, &clientID,
+      NULL)) != LGMP_OK)
   {
     usleep(100000);
     printf("lgmpClientSessionInit: %s\n", lgmpStatusString(status));

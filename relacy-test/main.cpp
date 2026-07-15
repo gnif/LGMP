@@ -77,8 +77,8 @@ public:
     }
 
     uint32_t clientId;
-    if((status = lgmpClientSessionInit(m_client, &dataSize, &data, &clientId))
-        != LGMP_OK)
+    if((status = lgmpClientSessionInit(m_client, &dataSize, &data, &clientId,
+        NULL)) != LGMP_OK)
     {
       printf("lgmpClientSessionInit: %s\n", lgmpStatusString(status));
       return false;

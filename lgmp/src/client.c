@@ -29,6 +29,14 @@
 
 #define LGMP_HEARTBEAT_TIMEOUT 1000
 
+/* Old LGMP header layout where magic & version were at offset 0.
+ * Used for detecting old hosts after the struct was restructured. */
+struct LGMPHeader_Old
+{
+  uint32_t magic;
+  uint32_t version;
+};
+
 struct LGMPClientQueue
 {
   PLGMPClient   client;
@@ -92,16 +100,34 @@ void lgmpClientFree(PLGMPClient * client)
 }
 
 LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
-    uint8_t ** udata, uint32_t * clientID)
+    uint8_t ** udata, uint32_t * clientID, uint32_t * remoteVersion)
 {
   assert(client);
   struct LGMPHeader * header = client->header;
 
+  if (remoteVersion)
+    *remoteVersion = 0;
+
   if (header->magic != LGMP_PROTOCOL_MAGIC)
-    return LGMP_ERR_INVALID_MAGIC;
+  {
+    /* magic not at the new layout position — try the old layout where
+     * magic & version were at offset 0 */
+    struct LGMPHeader_Old * old = (struct LGMPHeader_Old *)header;
+    if (old->magic != LGMP_PROTOCOL_MAGIC)
+      return LGMP_ERR_INVALID_MAGIC;
+
+    /* magic found at the old position → host is old, version mismatch */
+    if (remoteVersion)
+      *remoteVersion = old->version;
+    return LGMP_ERR_INVALID_VERSION;
+  }
 
   if (header->version != LGMP_PROTOCOL_VERSION)
+  {
+    if (remoteVersion)
+      *remoteVersion = header->version;
     return LGMP_ERR_INVALID_VERSION;
+  }
 
   uint64_t timestamp = atomic_load_explicit(&header->timestamp,
       memory_order_relaxed);
