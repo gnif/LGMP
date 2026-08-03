@@ -379,22 +379,15 @@ LGMP_STATUS lgmpHostQueuePost(PLGMPHostQueue queue, uint32_t udata,
 {
   struct LGMPHeaderQueue *hq = queue->hq;
 
-  // get the subscribers
-  uint32_t subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
-  uint32_t pend = LGMP_SUBS_ON(subs) & ~(LGMP_SUBS_BAD(subs));
-
-  // if nobody has subscribed there is no point in posting the message
-  if (!pend)
-    return LGMP_OK;
-
   LGMP_QUEUE_LOCK(hq);
-  subs = atomic_load_explicit(&hq->subs, memory_order_relaxed);
-  pend = LGMP_SUBS_ON(subs) & ~((uint32_t)LGMP_SUBS_BAD(subs));
-  if (unlikely(!pend))
-  {
-    LGMP_QUEUE_UNLOCK(hq);
-    return LGMP_OK;
-  }
+
+  // LGMP_OK transfers ownership of the payload to the queue even when there
+  // are no subscribers. lgmpHostProcess retires zero-pending messages, while
+  // the queue count prevents the producer from reusing the payload early.
+  const uint32_t subs =
+    atomic_load_explicit(&hq->subs, memory_order_relaxed);
+  const uint32_t pend =
+    LGMP_SUBS_ON(subs) & ~((uint32_t)LGMP_SUBS_BAD(subs));
 
   // full when count == numMessages
   if (unlikely(atomic_load_explicit(&hq->count,
