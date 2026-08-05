@@ -94,10 +94,10 @@
 
   static inline void _LGMP_LOCK(_Atomic(uint32_t) * lock)
   {
-    uint32_t expected = 0;
     int spins = 0;
     for (;;)
     {
+      uint32_t expected = 0;
       if (atomic_compare_exchange_weak_explicit(lock, &expected, 1,
             memory_order_acquire, memory_order_relaxed))
         break;
