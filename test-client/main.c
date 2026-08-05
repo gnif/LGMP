@@ -19,6 +19,7 @@
  */
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/mman.h>
@@ -160,7 +161,7 @@ int main(int argc, char * argv[])
   }
 #endif
 
-  uint32_t lastCount = 0;
+  uint64_t lastCount = 0;
   unsigned int msgCount = 0;
   while(lgmpClientSessionValid(client))
   {
@@ -182,7 +183,7 @@ int main(int argc, char * argv[])
     printf("message %u\n", ++msgCount);
 
     if (delay)
-      printf("Got %4u: %s\n", msg.udata, (char *)msg.mem);
+      printf("Got %4" PRIu64 ": %s\n", msg.udata, (char *)msg.mem);
 
 #if 0
     if (!lastCount)

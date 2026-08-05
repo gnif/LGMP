@@ -167,17 +167,19 @@
 
 struct LGMPHeaderMessage
 {
-  uint32_t udata;
+  uint64_t udata;
   uint32_t size;
   uint32_t offset;
   _Atomic(uint32_t) pendingSubs;
+  uint32_t _pad[3];
 }
 ALIGNED_16;
 
 struct LGMPClientMessage
 {
   uint32_t size;
-  uint32_t _padSize[3];
+  uint32_t clientID;
+  uint32_t _padSize[2];
   uint8_t  data[LGMP_MSGS_SIZE];
 }
 ALIGNED_16;
@@ -227,6 +229,22 @@ ALIGNED_64;
 #  define LGMP_STATIC_ASSERT _Static_assert
 #endif
 
+LGMP_STATIC_ASSERT(sizeof(struct LGMPHeaderMessage) == 32,
+                   "LGMPHeaderMessage size must remain stable");
+LGMP_STATIC_ASSERT(offsetof(struct LGMPHeaderMessage, udata) == 0,
+                   "LGMPHeaderMessage udata layout is invalid");
+LGMP_STATIC_ASSERT(offsetof(struct LGMPHeaderMessage, size) == 8,
+                   "LGMPHeaderMessage size layout is invalid");
+LGMP_STATIC_ASSERT(offsetof(struct LGMPHeaderMessage, offset) == 12,
+                   "LGMPHeaderMessage offset layout is invalid");
+LGMP_STATIC_ASSERT(offsetof(struct LGMPHeaderMessage, pendingSubs) == 16,
+                   "LGMPHeaderMessage pendingSubs layout is invalid");
+
+LGMP_STATIC_ASSERT(sizeof(struct LGMPClientMessage) == 80,
+                   "LGMPClientMessage size must remain unchanged");
+LGMP_STATIC_ASSERT(offsetof(struct LGMPClientMessage, data) == 16,
+                   "LGMPClientMessage data layout must remain unchanged");
+
 /* Sanity checks: keep the hot blocks on their own lines */
 /* ring invariants */
 LGMP_STATIC_ASSERT((LGMP_MSGS_MAX & (LGMP_MSGS_MAX - 1)) == 0,
@@ -246,9 +264,10 @@ LGMP_STATIC_ASSERT((offsetof(struct LGMPHeaderQueue, cMsgLock) & 63) == 0,
 
 struct LGMPHeader
 {
-  /* ---- Line 0: timestamp + explicit pad to 64B ---- */
+  /* ---- Line 0: session state + explicit pad to 64B ---- */
   _Atomic(uint64_t) timestamp;     /* 8 */
-  uint8_t           _padTs[56];    /* 56 -> total 64B */
+  _Atomic(uint32_t) nextClientID;  /* 4 */
+  uint8_t           _padTs[52];    /* 52 -> total 64B */
 
   /* ---- Line 1+: queues start 64B-aligned ---- */
   struct LGMPHeaderQueue queues[LGMP_MAX_QUEUES];

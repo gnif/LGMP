@@ -44,7 +44,7 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPClientQueue * result);
 
 typedef struct
 {
-  uint32_t   udata;
+  uint64_t   udata;
   uint32_t   size;
   void     * mem;
 }

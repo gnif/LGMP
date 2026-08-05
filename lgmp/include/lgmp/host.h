@@ -51,7 +51,24 @@ uint32_t    lgmpHostQueueNewSubs(PLGMPHostQueue queue);
 uint32_t    lgmpHostQueuePending(PLGMPHostQueue queue);
 LGMP_STATUS lgmpHostQueuePost   (PLGMPHostQueue queue, uint32_t udata,
     PLGMPMemory payload);
+
+// Post only to active subscribers whose client ID is in clientIDs. LGMP_OK
+// transfers payload ownership only when recipientCount is non-zero.
+LGMP_STATUS lgmpHostQueuePostForClients(PLGMPHostQueue queue, uint64_t udata,
+    PLGMPMemory payload, const uint32_t * clientIDs,
+    unsigned int clientCount, unsigned int * recipientCount);
+
+// True while the queue still owns an entry referencing payload.
+bool        lgmpHostQueuePayloadPending(PLGMPHostQueue queue,
+    PLGMPMemory payload);
+// True while an entry matching payload and udata still has pending recipients.
+bool        lgmpHostQueueMessagePending(PLGMPHostQueue queue,
+    PLGMPMemory payload, uint64_t udata);
 LGMP_STATUS lgmpHostReadData(PLGMPHostQueue queue, void * data, size_t * size);
+
+// Read client data and return the validated sending subscriber's client ID.
+LGMP_STATUS lgmpHostReadDataWithSource(PLGMPHostQueue queue, void * data,
+    size_t * size, uint32_t * clientID);
 LGMP_STATUS lgmpHostAckData(PLGMPHostQueue queue);
 LGMP_STATUS lgmpHostGetClientIDs(PLGMPHostQueue queue, uint32_t clientIDs[32],
     unsigned int * count);
