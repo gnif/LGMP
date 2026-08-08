@@ -42,6 +42,7 @@ const char * lgmpStatusString(LGMP_STATUS status)
     case LGMP_ERR_INVALID_VERSION   : return "LGMP_ERR_INVALID_VERSION";
     case LGMP_ERR_NO_SUCH_QUEUE     : return "LGMP_ERR_NO_SUCH_QUEUE";
     case LGMP_ERR_CORRUPTED         : return "LGMP_ERR_CORRUPTED";
+    case LGMP_ERR_QUEUE_BUSY        : return "LGMP_ERR_QUEUE_BUSY";
   }
   return "Invalid status!";
 }

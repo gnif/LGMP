@@ -697,8 +697,29 @@ done:
   return LGMP_OK;
 }
 
-LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue,
-    const void * restrict data, uint32_t size, uint32_t * serial)
+static bool lockClientMessageQueue(struct LGMPHeaderQueue * hq, bool wait)
+{
+  if (wait)
+  {
+    LGMP_QUEUE_LOCK(hq);
+    LGMP_LOCK(hq->cMsgLock);
+    return true;
+  }
+
+  if (!LGMP_QUEUE_TRY_LOCK(hq))
+    return false;
+
+  if (!LGMP_TRY_LOCK(hq->cMsgLock))
+  {
+    LGMP_QUEUE_UNLOCK(hq);
+    return false;
+  }
+
+  return true;
+}
+
+static LGMP_STATUS clientSendData(PLGMPClientQueue queue,
+    const void * restrict data, uint32_t size, uint32_t * serial, bool wait)
 {
   if (unlikely(size > LGMP_MSGS_SIZE))
     return LGMP_ERR_INVALID_SIZE;
@@ -722,8 +743,8 @@ LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue,
     return LGMP_ERR_QUEUE_FULL;
 
   // lock the subscription and client message buffer
-  LGMP_QUEUE_LOCK(hq);
-  LGMP_LOCK(hq->cMsgLock);
+  if (!lockClientMessageQueue(hq, wait))
+    return LGMP_ERR_QUEUE_BUSY;
 
   subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
   if (unlikely(queue->client->sessionID != queue->header->sessionID))
@@ -785,7 +806,19 @@ LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue,
     *serial = tmp + 1;
 
   return LGMP_OK;
-};
+}
+
+LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue,
+    const void * restrict data, uint32_t size, uint32_t * serial)
+{
+  return clientSendData(queue, data, size, serial, true);
+}
+
+LGMP_STATUS lgmpClientTrySendData(PLGMPClientQueue queue,
+    const void * restrict data, uint32_t size, uint32_t * serial)
+{
+  return clientSendData(queue, data, size, serial, false);
+}
 
 LGMP_STATUS lgmpClientGetSerial(PLGMPClientQueue queue, uint32_t * serial)
 {

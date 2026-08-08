@@ -59,6 +59,11 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue);
 LGMP_STATUS lgmpClientSendData(PLGMPClientQueue queue, const void * data,
     uint32_t size, uint32_t * serial);
 
+// attempt to send data without waiting for shared queue locks
+// returns LGMP_ERR_QUEUE_BUSY if either lock is contended
+LGMP_STATUS lgmpClientTrySendData(PLGMPClientQueue queue, const void * data,
+    uint32_t size, uint32_t * serial);
+
 // get the last serial processed by the host
 // this can be used to determine if data messages have been processed by the host
 LGMP_STATUS lgmpClientGetSerial(PLGMPClientQueue queue, uint32_t * serial);
