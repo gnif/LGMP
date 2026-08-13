@@ -21,12 +21,12 @@
 #ifndef LGMP_LGMP_H
 #define LGMP_LGMP_H
 
-#define LGMP_PROTOCOL_VERSION 11
+#define LGMP_PROTOCOL_VERSION 12
 
 // this MUST match the size defined in `src/headers.h`
 #define LGMP_MSGS_SIZE 64
 
-#define LGMP_MAX_QUEUES  5
+#define LGMP_MAX_QUEUES  6
 #define LGMP_MAX_CLIENTS 8
 
 #ifdef __cplusplus
