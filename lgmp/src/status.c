@@ -43,6 +43,11 @@ const char * lgmpStatusString(LGMP_STATUS status)
     case LGMP_ERR_NO_SUCH_QUEUE     : return "LGMP_ERR_NO_SUCH_QUEUE";
     case LGMP_ERR_CORRUPTED         : return "LGMP_ERR_CORRUPTED";
     case LGMP_ERR_QUEUE_BUSY        : return "LGMP_ERR_QUEUE_BUSY";
+    case LGMP_ERR_STREAM_FULL       : return "LGMP_ERR_STREAM_FULL";
+    case LGMP_ERR_STREAM_EMPTY      : return "LGMP_ERR_STREAM_EMPTY";
+    case LGMP_ERR_STREAM_UNBOUND    : return "LGMP_ERR_STREAM_UNBOUND";
+    case LGMP_ERR_STREAM_STALE      : return "LGMP_ERR_STREAM_STALE";
+    case LGMP_ERR_STREAM_BUSY       : return "LGMP_ERR_STREAM_BUSY";
   }
   return "Invalid status!";
 }

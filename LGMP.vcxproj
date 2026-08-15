@@ -152,13 +152,16 @@
     <ClCompile Include="lgmp\src\client.c" />
     <ClCompile Include="lgmp\src\host.c" />
     <ClCompile Include="lgmp\src\status.c" />
+    <ClCompile Include="lgmp\src\stream.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lgmp\include\lgmp\client.h" />
     <ClInclude Include="lgmp\include\lgmp\host.h" />
     <ClInclude Include="lgmp\include\lgmp\lgmp.h" />
     <ClInclude Include="lgmp\include\lgmp\status.h" />
+    <ClInclude Include="lgmp\include\lgmp\stream.h" />
     <ClInclude Include="lgmp\src\headers.h" />
+    <ClInclude Include="lgmp\src\stream.h" />
     <ClInclude Include="lgmp\src\lgmp.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

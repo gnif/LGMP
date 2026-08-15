@@ -33,11 +33,13 @@
 extern "C" {
 #endif
 
-typedef struct LGMPHost        * PLGMPHost;
-typedef struct LGMPClient      * PLGMPClient;
-typedef struct LGMPHostQueue   * PLGMPHostQueue;
-typedef struct LGMPClientQueue * PLGMPClientQueue;
-typedef struct LGMPMemory      * PLGMPMemory;
+typedef struct LGMPHost         * PLGMPHost;
+typedef struct LGMPClient       * PLGMPClient;
+typedef struct LGMPHostQueue    * PLGMPHostQueue;
+typedef struct LGMPClientQueue  * PLGMPClientQueue;
+typedef struct LGMPMemory       * PLGMPMemory;
+typedef struct LGMPHostStream   * PLGMPHostStream;
+typedef struct LGMPClientStream * PLGMPClientStream;
 
 #ifdef __cplusplus
 }

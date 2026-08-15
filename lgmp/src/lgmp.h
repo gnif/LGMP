@@ -22,6 +22,9 @@
 #define LGMP_PRIVATE_LGMP_H
 
 #include "lgmp/lgmp.h"
+#include "lgmp/status.h"
+#include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 #if defined(_WIN32)
@@ -41,6 +44,12 @@ struct LGMPMemory
   uint32_t     size;
   void        *mem;
 };
+
+/* Internal context accessors used by separately allocated LGMP ABIs. */
+void lgmpHostGetMemoryContext(PLGMPHost host, uint8_t ** mem, size_t * size,
+    uint32_t ** sessionID);
+LGMP_STATUS lgmpClientGetMemoryContext(PLGMPClient client, uint8_t ** mem,
+    size_t * size, uint32_t ** sessionID, uint32_t * clientID);
 
 // returns a milliseond resolution monotonic counter
 inline static uint64_t lgmpGetClockMS(void)

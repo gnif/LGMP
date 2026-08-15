@@ -7,6 +7,7 @@ set(SOURCES
 	src/host.c
 	src/client.c
 	src/status.c
+	src/stream.c
 )
 
 add_compile_options(

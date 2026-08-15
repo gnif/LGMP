@@ -58,6 +58,19 @@ struct LGMPHost
   struct LGMPHostQueue   queues[LGMP_MAX_QUEUES];
 };
 
+void lgmpHostGetMemoryContext(PLGMPHost host, uint8_t ** mem, size_t * size,
+    uint32_t ** sessionID)
+{
+  assert(host);
+  assert(mem);
+  assert(size);
+  assert(sessionID);
+
+  *mem       = host->mem;
+  *size      = host->size;
+  *sessionID = &host->header->sessionID;
+}
+
 static void initHeader(PLGMPHost host)
 {
   host->header->timestamp = lgmpGetClockMS();
@@ -406,19 +419,27 @@ LGMP_STATUS lgmpHostMemAllocAligned(PLGMPHost host, uint32_t size,
 {
   assert(host);
   assert(result);
+  *result = NULL;
 
-  uint32_t nextFree = host->nextFree;
+  uint64_t nextFree = host->nextFree;
+  uint64_t allocSize = size;
   if (alignment > 0)
   {
     // alignment must be a power of two
     if ((alignment & (alignment - 1)) != 0)
       return LGMP_ERR_INVALID_ALIGNMENT;
 
-    size     = (size     + (alignment - 1)) & ~(alignment - 1);
-    nextFree = (nextFree + (alignment - 1)) & ~(alignment - 1);
+    allocSize = (allocSize + (alignment - 1U)) &
+      ~((uint64_t)alignment - 1U);
+    nextFree = (nextFree + (alignment - 1U)) &
+      ~((uint64_t)alignment - 1U);
   }
 
-  if (size > host->avail - (nextFree - host->nextFree))
+  if (allocSize > UINT32_MAX || nextFree > UINT32_MAX)
+    return LGMP_ERR_INVALID_SIZE;
+
+  const uint32_t padding = (uint32_t)nextFree - host->nextFree;
+  if (padding > host->avail || allocSize > host->avail - padding)
     return LGMP_ERR_NO_SHARED_MEM;
 
   *result = calloc(1, sizeof(**result));
@@ -427,12 +448,12 @@ LGMP_STATUS lgmpHostMemAllocAligned(PLGMPHost host, uint32_t size,
 
   PLGMPMemory mem = *result;
   mem->host   = host;
-  mem->offset = nextFree;
-  mem->size   = size;
+  mem->offset = (uint32_t)nextFree;
+  mem->size   = (uint32_t)allocSize;
   mem->mem    = host->mem + nextFree;
 
-  host->avail   -= (nextFree - host->nextFree) + size;
-  host->nextFree = nextFree + size;
+  host->avail   -= padding + (uint32_t)allocSize;
+  host->nextFree = (uint32_t)(nextFree + allocSize);
 
   return LGMP_OK;
 }

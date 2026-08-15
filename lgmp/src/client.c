@@ -51,6 +51,7 @@ struct LGMPClientQueue
 struct LGMPClient
 {
   uint8_t           * mem;
+  size_t              size;
   struct LGMPHeader * header;
 
   uint32_t id;
@@ -60,6 +61,26 @@ struct LGMPClient
 
   struct LGMPClientQueue queues[LGMP_MAX_QUEUES];
 };
+
+LGMP_STATUS lgmpClientGetMemoryContext(PLGMPClient client, uint8_t ** mem,
+    size_t * size, uint32_t ** sessionID, uint32_t * clientID)
+{
+  assert(client);
+  assert(mem);
+  assert(size);
+  assert(sessionID);
+  assert(clientID);
+
+  if (!client->sessionID ||
+      unlikely(client->sessionID != client->header->sessionID))
+    return LGMP_ERR_INVALID_SESSION;
+
+  *mem       = client->mem;
+  *size      = client->size;
+  *sessionID = &client->header->sessionID;
+  *clientID  = client->id;
+  return LGMP_OK;
+}
 
 static void clearSubscriberMessages(PLGMPClient client,
     struct LGMPHeaderQueue * hq, uint32_t bit)
@@ -94,6 +115,7 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
 
   PLGMPClient client = *result;
   client->mem           = (uint8_t*)mem;
+  client->size          = size;
   client->header        = header;
   client->hosttime      = atomic_load_explicit(&header->timestamp,
       memory_order_relaxed);
