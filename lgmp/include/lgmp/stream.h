@@ -49,8 +49,11 @@ enum LGMPStreamPolicy
 
 enum LGMPStreamNotifyReason
 {
+  /* The producer published one or more records. */
   LGMP_STREAM_NOTIFY_DATA    = 1U << 0,
+  /* The consumer returned one or more slots. */
   LGMP_STREAM_NOTIFY_CREDIT  = 1U << 1,
+  /* The host changed the binding state or epoch. */
   LGMP_STREAM_NOTIFY_BINDING = 1U << 2
 };
 
@@ -96,6 +99,50 @@ typedef struct LGMPStreamBuffer
 }
 LGMPStreamBuffer;
 
+/*
+ * Adaptive polling is the mandatory fallback for stream transports whose
+ * peer notification is unavailable, coalesced, or lost. The state is local;
+ * it is never placed in shared memory and performs no allocation.
+ *
+ * A caller should invoke lgmpStreamPollActivity after making progress or
+ * after its wait primitive reports a peer notification. When an operation
+ * returns LGMP_ERR_STREAM_EMPTY or LGMP_ERR_STREAM_FULL, call
+ * lgmpStreamPollIdle and wait for at most the returned number of
+ * microseconds. A zero result requests another immediate attempt.
+ *
+ * The state is owned by the polling thread. A notifier running on another
+ * thread should wake that thread rather than modify the state directly.
+ */
+struct LGMPStreamPollConfig
+{
+  uint32_t spinCount;
+  uint32_t minWaitUs;
+  uint32_t maxWaitUs;
+};
+
+typedef struct LGMPStreamPollState
+{
+  struct LGMPStreamPollConfig _config;
+  uint32_t                    _spinRemaining;
+  uint32_t                    _nextWaitUs;
+}
+LGMPStreamPollState;
+
+LGMP_STATUS lgmpStreamPollInit(LGMPStreamPollState * state,
+    const struct LGMPStreamPollConfig config);
+void lgmpStreamPollActivity(LGMPStreamPollState * state);
+uint32_t lgmpStreamPollIdle(LGMPStreamPollState * state);
+
+/*
+ * The notifier is an advisory request to wake the peer after the associated
+ * shared-memory publication is visible. It may be coalesced or lost by the
+ * transport, must not block, and must not be the only way the peer makes
+ * progress. Callers must retain a bounded polling fallback.
+ *
+ * Installing or replacing a notifier must be serialized with operations on
+ * the same local stream handle. The callback may inspect the descriptor but
+ * must not re-enter that handle.
+ */
 typedef void (*LGMPStreamNotifyFn)(void * opaque,
     const struct LGMPStreamDescriptor * descriptor, uint32_t reasons);
 

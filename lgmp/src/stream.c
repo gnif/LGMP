@@ -428,6 +428,45 @@ static void notifyPeer(struct LGMPStreamLocal * local, uint32_t reasons)
     local->notifier(local->notifierOpaque, &local->descriptor, reasons);
 }
 
+LGMP_STATUS lgmpStreamPollInit(LGMPStreamPollState * state,
+    const struct LGMPStreamPollConfig config)
+{
+  if (!state || config.minWaitUs == 0U ||
+      config.maxWaitUs < config.minWaitUs)
+    return LGMP_ERR_INVALID_ARGUMENT;
+
+  state->_config = config;
+  lgmpStreamPollActivity(state);
+  return LGMP_OK;
+}
+
+void lgmpStreamPollActivity(LGMPStreamPollState * state)
+{
+  assert(state);
+  state->_spinRemaining = state->_config.spinCount;
+  state->_nextWaitUs    = state->_config.minWaitUs;
+}
+
+uint32_t lgmpStreamPollIdle(LGMPStreamPollState * state)
+{
+  assert(state);
+
+  if (state->_spinRemaining)
+  {
+    --state->_spinRemaining;
+    return 0U;
+  }
+
+  const uint32_t waitUs = state->_nextWaitUs;
+  if (waitUs >= state->_config.maxWaitUs ||
+      waitUs > state->_config.maxWaitUs / 2U)
+    state->_nextWaitUs = state->_config.maxWaitUs;
+  else
+    state->_nextWaitUs = waitUs * 2U;
+
+  return waitUs;
+}
+
 static LGMP_STATUS writeAcquire(struct LGMPStreamLocal * local,
     LGMPStreamBuffer * buffer)
 {
