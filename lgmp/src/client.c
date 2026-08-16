@@ -56,8 +56,9 @@ struct LGMPClient
 
   uint32_t id;
   uint32_t sessionID;
-  uint64_t hosttime;
-  uint64_t lastHeartbeat;
+  _Atomic(uint32_t) heartbeatLock;
+  uint64_t          hosttime;
+  uint64_t          lastHeartbeat;
 
   struct LGMPClientQueue queues[LGMP_MAX_QUEUES];
 };
@@ -117,7 +118,8 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
   client->mem           = (uint8_t*)mem;
   client->size          = size;
   client->header        = header;
-  client->hosttime      = atomic_load_explicit(&header->timestamp,
+  LGMP_LOCK_INIT(client->heartbeatLock);
+  client->hosttime = atomic_load_explicit(&header->timestamp,
       memory_order_relaxed);
   return LGMP_OK;
 }
@@ -166,12 +168,16 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
       memory_order_relaxed);
   const uint32_t sessionID = header->sessionID;
 #ifndef LGMP_REALACY
+  LGMP_LOCK(client->heartbeatLock);
+  const uint64_t initialHosttime = client->hosttime;
+  LGMP_UNLOCK(client->heartbeatLock);
+
   // check the host's timestamp is updating
   const uint64_t end = lgmpGetClockMS() + 500;
   bool valid = false;
   do
   {
-    if (timestamp != client->hosttime)
+    if (timestamp != initialHosttime)
     {
       valid = true;
       break;
@@ -195,9 +201,11 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
   if (unlikely(sessionID != header->sessionID))
     return LGMP_ERR_INVALID_SESSION;
 
+  LGMP_LOCK(client->heartbeatLock);
   client->sessionID     = sessionID;
   client->hosttime      = timestamp;
   client->lastHeartbeat = lgmpGetClockMS();
+  LGMP_UNLOCK(client->heartbeatLock);
 
   if (udataSize) *udataSize = header->udataSize;
   if (udata    ) *udata     = (uint8_t*)&header->udata;
@@ -211,9 +219,14 @@ bool lgmpClientSessionValid(PLGMPClient client)
 {
   assert(client);
 
+  LGMP_LOCK(client->heartbeatLock);
+
   // check if the host has been restarted
   if (unlikely(client->sessionID != client->header->sessionID))
+  {
+    LGMP_UNLOCK(client->heartbeatLock);
     return false;
+  }
 
 #ifndef LGMP_REALACY
 
@@ -225,16 +238,59 @@ bool lgmpClientSessionValid(PLGMPClient client)
   {
     client->lastHeartbeat = now;
     client->hosttime      = hosttime;
+    LGMP_UNLOCK(client->heartbeatLock);
     return true;
   }
 
   // check if the heartbeat timeout has been exceeded
   if (unlikely(now - client->lastHeartbeat > LGMP_HEARTBEAT_TIMEOUT))
+  {
+    LGMP_UNLOCK(client->heartbeatLock);
     return false;
+  }
 
 #endif
 
+  LGMP_UNLOCK(client->heartbeatLock);
   return true;
+}
+
+static bool lockClientShared(PLGMPClient client,
+    _Atomic(uint32_t) * lock)
+{
+  unsigned int spins = 0;
+  bool contended = false;
+
+  /* The host can terminate while owning a shared lock. Keep checking its
+   * heartbeat so an abandoned lock cannot block client teardown forever. */
+  if (unlikely(!lgmpClientSessionValid(client)))
+    return false;
+
+  while (!LGMP_TRY_LOCK(*lock))
+  {
+    contended = true;
+    if ((++spins & 0xFF) == 0)
+    {
+      if (unlikely(!lgmpClientSessionValid(client)))
+        return false;
+
+      lgmpSleepMs(0);
+    }
+  }
+
+  if (unlikely(contended && !lgmpClientSessionValid(client)))
+  {
+    LGMP_UNLOCK(*lock);
+    return false;
+  }
+
+  return true;
+}
+
+static bool lockClientQueue(PLGMPClient client,
+    struct LGMPHeaderQueue * hq)
+{
+  return lockClientShared(client, &hq->lock);
 }
 
 LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
@@ -263,7 +319,8 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
   PLGMPClientQueue q = &client->queues[queueIndex];
 
   // take the queue lock
-  LGMP_QUEUE_LOCK(hq);
+  if (!lockClientQueue(client, hq))
+    return LGMP_ERR_INVALID_SESSION;
 
   if (unlikely(client->sessionID != client->header->sessionID))
   {
@@ -347,7 +404,8 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPClientQueue * result)
       hq->clientID[queue->id] != queue->client->id)
     return LGMP_ERR_QUEUE_TIMEOUT;
 
-  LGMP_QUEUE_LOCK(hq);
+  if (!lockClientQueue(queue->client, hq))
+    return LGMP_ERR_INVALID_SESSION;
 
   if (unlikely(queue->client->sessionID != queue->header->sessionID))
   {
@@ -390,7 +448,8 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
     (queue->client->mem + hq->messagesOffset);
-  LGMP_QUEUE_LOCK(hq);
+  if (!lockClientQueue(queue->client, hq))
+    return LGMP_ERR_INVALID_SESSION;
 
   if (unlikely(queue->client->sessionID != queue->header->sessionID))
   {
@@ -516,7 +575,8 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
   if (!(atomic_load_explicit(&msg->pendingSubs,
           memory_order_acquire) & bit))
   {
-    LGMP_QUEUE_LOCK(hq);
+    if (!lockClientQueue(queue->client, hq))
+      return LGMP_ERR_INVALID_SESSION;
 
     if (unlikely(queue->client->sessionID != queue->header->sessionID))
     {
@@ -611,7 +671,8 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
 
-  LGMP_QUEUE_LOCK(hq);
+  if (!lockClientQueue(queue->client, hq))
+    return LGMP_ERR_INVALID_SESSION;
 
   if (unlikely(queue->client->sessionID != queue->header->sessionID))
   {
@@ -719,25 +780,45 @@ done:
   return LGMP_OK;
 }
 
-static bool lockClientMessageQueue(struct LGMPHeaderQueue * hq, bool wait)
+static LGMP_STATUS lockClientMessageQueue(PLGMPClientQueue queue, bool wait)
 {
+  struct LGMPHeaderQueue * hq = queue->hq;
+
   if (wait)
   {
-    LGMP_QUEUE_LOCK(hq);
-    LGMP_LOCK(hq->cMsgLock);
-    return true;
+    if (!lockClientQueue(queue->client, hq))
+      return LGMP_ERR_INVALID_SESSION;
+
+    if (!lockClientShared(queue->client, &hq->cMsgLock))
+    {
+      LGMP_QUEUE_UNLOCK(hq);
+      return LGMP_ERR_INVALID_SESSION;
+    }
+
+    return LGMP_OK;
   }
 
+  if (unlikely(!lgmpClientSessionValid(queue->client)))
+    return LGMP_ERR_INVALID_SESSION;
+
   if (!LGMP_QUEUE_TRY_LOCK(hq))
-    return false;
+    return LGMP_ERR_QUEUE_BUSY;
 
   if (!LGMP_TRY_LOCK(hq->cMsgLock))
   {
     LGMP_QUEUE_UNLOCK(hq);
-    return false;
+    return lgmpClientSessionValid(queue->client) ?
+      LGMP_ERR_QUEUE_BUSY : LGMP_ERR_INVALID_SESSION;
   }
 
-  return true;
+  if (unlikely(!lgmpClientSessionValid(queue->client)))
+  {
+    LGMP_UNLOCK(hq->cMsgLock);
+    LGMP_QUEUE_UNLOCK(hq);
+    return LGMP_ERR_INVALID_SESSION;
+  }
+
+  return LGMP_OK;
 }
 
 static LGMP_STATUS clientSendData(PLGMPClientQueue queue,
@@ -765,8 +846,9 @@ static LGMP_STATUS clientSendData(PLGMPClientQueue queue,
     return LGMP_ERR_QUEUE_FULL;
 
   // lock the subscription and client message buffer
-  if (!lockClientMessageQueue(hq, wait))
-    return LGMP_ERR_QUEUE_BUSY;
+  const LGMP_STATUS lockStatus = lockClientMessageQueue(queue, wait);
+  if (lockStatus != LGMP_OK)
+    return lockStatus;
 
   subs = atomic_load_explicit(&hq->subs, memory_order_acquire);
   if (unlikely(queue->client->sessionID != queue->header->sessionID))
