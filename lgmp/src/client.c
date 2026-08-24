@@ -28,6 +28,7 @@
 #include <stdlib.h>
 
 #define LGMP_HEARTBEAT_TIMEOUT 1000
+#define LGMP_MESSAGE_ALIGNMENT 16u
 
 /* Old LGMP header layout where magic & version were at offset 0.
  * Used for detecting old hosts after the struct was restructured. */
@@ -43,9 +44,13 @@ struct LGMPClientQueue
   unsigned int  id;
   unsigned int  index;
   uint32_t      position;
+  uint32_t      queueID;
+  uint32_t      numMessages;
+  uint32_t      messageMask;
 
   struct LGMPHeader      * header;
   struct LGMPHeaderQueue * hq;
+  struct LGMPHeaderMessage * messages;
 };
 
 struct LGMPClient
@@ -59,9 +64,72 @@ struct LGMPClient
   _Atomic(uint32_t) heartbeatLock;
   uint64_t          hosttime;
   uint64_t          lastHeartbeat;
+  uint32_t          numQueues;
 
   struct LGMPClientQueue queues[LGMP_MAX_QUEUES];
 };
+
+struct LGMPClientQueueState
+{
+  uint32_t position;
+  uint32_t start;
+  uint32_t count;
+};
+
+struct LGMPClientMessageState
+{
+  uint32_t avail;
+  uint32_t wpos;
+};
+
+static bool cacheClientQueue(PLGMPClient client, uint32_t index,
+    size_t firstMessageOffset, PLGMPClientQueue queue)
+{
+  struct LGMPHeaderQueue * hq = &client->header->queues[index];
+  const uint32_t numMessages = hq->numMessages;
+  const size_t messagesOffset = hq->messagesOffset;
+
+  if (numMessages < 2 || !LGMP_IS_POW2(numMessages) ||
+      messagesOffset < firstMessageOffset ||
+      (messagesOffset & (LGMP_MESSAGE_ALIGNMENT - 1u)) != 0 ||
+      messagesOffset > client->size ||
+      numMessages >
+        (client->size - messagesOffset) / sizeof(struct LGMPHeaderMessage))
+    return false;
+
+  queue->client      = client;
+  queue->index       = index;
+  queue->queueID     = hq->queueID;
+  queue->numMessages = numMessages;
+  queue->messageMask = numMessages - 1;
+  queue->header      = client->header;
+  queue->hq          = hq;
+  queue->messages    = (struct LGMPHeaderMessage *)
+    (client->mem + messagesOffset);
+  return true;
+}
+
+static bool snapshotClientQueueState(PLGMPClientQueue queue,
+    struct LGMPClientQueueState * state)
+{
+  struct LGMPHeaderQueue * hq = queue->hq;
+  state->position = atomic_load_explicit(&hq->position,
+      memory_order_relaxed);
+  state->start = hq->start;
+  state->count = atomic_load_explicit(&hq->count, memory_order_relaxed);
+
+  return state->position < queue->numMessages &&
+    state->start < queue->numMessages && state->count <= queue->numMessages;
+}
+
+static bool snapshotClientMessageState(PLGMPClientQueue queue,
+    struct LGMPClientMessageState * state)
+{
+  struct LGMPHeaderQueue * hq = queue->hq;
+  state->avail = atomic_load_explicit(&hq->cMsgAvail, memory_order_relaxed);
+  state->wpos  = atomic_load_explicit(&hq->cMsgWPos , memory_order_relaxed);
+  return state->avail <= LGMP_MSGS_MAX && state->wpos < LGMP_MSGS_MAX;
+}
 
 LGMP_STATUS lgmpClientGetMemoryContext(PLGMPClient client, uint8_t ** mem,
     size_t * size, uint32_t ** sessionID, uint32_t * clientID)
@@ -83,14 +151,10 @@ LGMP_STATUS lgmpClientGetMemoryContext(PLGMPClient client, uint8_t ** mem,
   return LGMP_OK;
 }
 
-static void clearSubscriberMessages(PLGMPClient client,
-    struct LGMPHeaderQueue * hq, uint32_t bit)
+static void clearSubscriberMessages(PLGMPClientQueue queue, uint32_t bit)
 {
-  struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
-    (client->mem + hq->messagesOffset);
-
-  for(uint32_t i = 0; i < hq->numMessages; ++i)
-    atomic_fetch_and_explicit(&messages[i].pendingSubs, ~bit,
+  for(uint32_t i = 0; i < queue->numMessages; ++i)
+    atomic_fetch_and_explicit(&queue->messages[i].pendingSubs, ~bit,
         memory_order_relaxed);
 }
 
@@ -164,6 +228,16 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
     return LGMP_ERR_INVALID_VERSION;
   }
 
+  const uint32_t numQueues = header->numQueues;
+  const uint32_t sessionUdataSize = header->udataSize;
+  if (numQueues > LGMP_MAX_QUEUES)
+    return LGMP_ERR_CORRUPTED;
+
+  if (sessionUdataSize > client->size - sizeof(*header))
+    return LGMP_ERR_INVALID_SIZE;
+
+  const size_t firstMessageOffset = sizeof(*header) + sessionUdataSize;
+
   uint64_t timestamp = atomic_load_explicit(&header->timestamp,
       memory_order_relaxed);
   const uint32_t sessionID = header->sessionID;
@@ -191,6 +265,18 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
     return LGMP_ERR_INVALID_SESSION;
 #endif
 
+  if (unlikely(sessionID != header->sessionID))
+    return LGMP_ERR_INVALID_SESSION;
+
+  struct LGMPClientQueue queues[LGMP_MAX_QUEUES] = { 0 };
+  for(uint32_t i = 0; i < numQueues; ++i)
+    if (!cacheClientQueue(client, i, firstMessageOffset, &queues[i]))
+      return LGMP_ERR_CORRUPTED;
+
+  if (unlikely(numQueues != header->numQueues ||
+        sessionUdataSize != header->udataSize))
+    return LGMP_ERR_CORRUPTED;
+
   do
   {
     client->id = atomic_fetch_add_explicit(&header->nextClientID, 1,
@@ -201,17 +287,19 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
   if (unlikely(sessionID != header->sessionID))
     return LGMP_ERR_INVALID_SESSION;
 
+  memcpy(client->queues, queues, sizeof(client->queues));
+
   LGMP_LOCK(client->heartbeatLock);
   client->sessionID     = sessionID;
   client->hosttime      = timestamp;
   client->lastHeartbeat = lgmpGetClockMS();
+  client->numQueues     = numQueues;
   LGMP_UNLOCK(client->heartbeatLock);
 
-  if (udataSize) *udataSize = header->udataSize;
+  if (udataSize) *udataSize = sessionUdataSize;
   if (udata    ) *udata     = (uint8_t*)&header->udata;
   if (clientID ) *clientID  = client->id;
 
-  memset(&client->queues, 0, sizeof(client->queues));
   return LGMP_OK;
 }
 
@@ -304,19 +392,19 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
   if (unlikely(client->sessionID != client->header->sessionID))
     return LGMP_ERR_INVALID_SESSION;
 
-  struct LGMPHeaderQueue *hq = NULL;
+  PLGMPClientQueue q = NULL;
   uint32_t queueIndex;
-  for(queueIndex = 0; queueIndex < client->header->numQueues; ++queueIndex)
-    if (client->header->queues[queueIndex].queueID == queueID)
+  for(queueIndex = 0; queueIndex < client->numQueues; ++queueIndex)
+    if (client->queues[queueIndex].queueID == queueID)
     {
-      hq = &client->header->queues[queueIndex];
+      q = &client->queues[queueIndex];
       break;
     }
 
-  if (!hq)
+  if (!q)
     return LGMP_ERR_NO_SUCH_QUEUE;
 
-  PLGMPClientQueue q = &client->queues[queueIndex];
+  struct LGMPHeaderQueue * hq = q->hq;
 
   // take the queue lock
   if (!lockClientQueue(client, hq))
@@ -326,6 +414,15 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
   {
     LGMP_QUEUE_UNLOCK(hq);
     return LGMP_ERR_INVALID_SESSION;
+  }
+
+  struct LGMPClientQueueState queueState;
+  struct LGMPClientMessageState messageState;
+  if (unlikely(!snapshotClientQueueState(q, &queueState) ||
+        !snapshotClientMessageState(q, &messageState)))
+  {
+    LGMP_QUEUE_UNLOCK(hq);
+    return LGMP_ERR_CORRUPTED;
   }
 
   uint32_t subs = atomic_load_explicit(&hq->subs, memory_order_relaxed);
@@ -364,19 +461,15 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
   }
 
   const uint32_t bit = 1U << id;
-  clearSubscriberMessages(client, hq, bit);
+  clearSubscriberMessages(q, bit);
   hq->timeout [id] = 0;
   hq->clientID[id] = client->id;
   subs = LGMP_SUBS_SET(subs, bit);
   atomic_store_explicit(&hq->subs, subs, memory_order_release);
   atomic_fetch_add_explicit(&hq->newSubCount, 1, memory_order_relaxed);
 
-  q->header   = client->header;
-  q->client   = client;
-  q->index    = queueIndex;
   q->id       = id;
-  q->position = hq->position;
-  q->hq       = hq;
+  q->position = queueState.position;
 
   *result = q;
   LGMP_QUEUE_UNLOCK(hq);
@@ -413,6 +506,15 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPClientQueue * result)
     return LGMP_ERR_INVALID_SESSION;
   }
 
+  struct LGMPClientQueueState queueState;
+  struct LGMPClientMessageState messageState;
+  if (unlikely(!snapshotClientQueueState(queue, &queueState) ||
+        !snapshotClientMessageState(queue, &messageState)))
+  {
+    LGMP_QUEUE_UNLOCK(hq);
+    return LGMP_ERR_CORRUPTED;
+  }
+
   subs = atomic_load_explicit(&hq->subs, memory_order_relaxed);
   if ((LGMP_SUBS_BAD(subs) & bit) ||
       hq->clientID[queue->id] != queue->client->id)
@@ -422,14 +524,15 @@ LGMP_STATUS lgmpClientUnsubscribe(PLGMPClientQueue * result)
   }
 
   // unset the queue id bit
-  clearSubscriberMessages(queue->client, hq, bit);
+  clearSubscriberMessages(queue, bit);
   subs = LGMP_SUBS_CLEAR(subs, bit);
   atomic_store_explicit(&hq->subs, subs, memory_order_release);
   hq->timeout [queue->id] = 0;
   hq->clientID[queue->id] = 0;
   LGMP_QUEUE_UNLOCK(hq);
 
-  memset(queue, 0, sizeof(struct LGMPClientQueue));
+  queue->id       = 0;
+  queue->position = 0;
   *result = NULL;
 
   return LGMP_OK;
@@ -444,10 +547,8 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
 
   struct LGMPHeaderQueue *hq = queue->hq;
   const uint32_t bit = 1U << queue->id;
-  const uint32_t mask = hq->numMessages - 1;
-
-  struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
-    (queue->client->mem + hq->messagesOffset);
+  const uint32_t mask = queue->messageMask;
+  struct LGMPHeaderMessage * messages = queue->messages;
   if (!lockClientQueue(queue->client, hq))
     return LGMP_ERR_INVALID_SESSION;
 
@@ -474,13 +575,18 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
       return LGMP_ERR_INVALID_SESSION;
   }
 
-  const uint32_t count = atomic_load_explicit(&hq->count,
-      memory_order_relaxed);
-  uint32_t pos = hq->start;
+  struct LGMPClientQueueState state;
+  if (unlikely(!snapshotClientQueueState(queue, &state)))
+  {
+    LGMP_QUEUE_UNLOCK(hq);
+    return LGMP_ERR_CORRUPTED;
+  }
+
+  uint32_t pos = state.start;
   uint32_t last = 0;
   bool found = false;
 
-  for(uint32_t i = 0; i < count; ++i)
+  for(uint32_t i = 0; i < state.count; ++i)
   {
     if (atomic_load_explicit(&messages[pos].pendingSubs,
           memory_order_relaxed) & bit)
@@ -493,8 +599,7 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
 
   if (!found)
   {
-    queue->position = atomic_load_explicit(&hq->position,
-        memory_order_relaxed);
+    queue->position = state.position;
     LGMP_QUEUE_UNLOCK(hq);
     return LGMP_ERR_QUEUE_EMPTY;
   }
@@ -505,7 +610,7 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
     return LGMP_ERR_INVALID_SESSION;
   }
 
-  pos = hq->start;
+  pos = state.start;
   while(pos != last)
   {
     atomic_fetch_and_explicit(&messages[pos].pendingSubs, ~bit,
@@ -516,16 +621,26 @@ LGMP_STATUS lgmpClientAdvanceToLast(PLGMPClientQueue queue)
   bool cleaned = false;
   const uint32_t active =
     LGMP_SUBS_ON(subs) & ~((uint32_t)LGMP_SUBS_BAD(subs));
-  while(atomic_load_explicit(&hq->count, memory_order_relaxed))
+  uint32_t remaining = state.count;
+  uint32_t start = state.start;
+  while(remaining)
   {
-    struct LGMPHeaderMessage *msg = &messages[hq->start];
+    struct LGMPHeaderMessage *msg = &messages[start];
     if (atomic_load_explicit(&msg->pendingSubs,
           memory_order_relaxed) & active)
       break;
 
     atomic_store_explicit(&msg->pendingSubs, 0, memory_order_relaxed);
-    hq->start = (hq->start + 1) & mask;
-    atomic_fetch_sub_explicit(&hq->count, 1, memory_order_relaxed);
+    start = (start + 1) & mask;
+    hq->start = start;
+    const uint32_t oldCount = atomic_fetch_sub_explicit(&hq->count, 1,
+        memory_order_relaxed);
+    if (unlikely(oldCount != remaining))
+    {
+      LGMP_QUEUE_UNLOCK(hq);
+      return LGMP_ERR_CORRUPTED;
+    }
+    --remaining;
     cleaned = true;
   }
 
@@ -568,9 +683,11 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
       return LGMP_ERR_INVALID_SESSION;
   }
 
-  struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
-    (queue->client->mem + hq->messagesOffset);
-  struct LGMPHeaderMessage *msg = &messages[queue->position];
+  if (unlikely(queue->position >= queue->numMessages))
+    return LGMP_ERR_CORRUPTED;
+
+  struct LGMPHeaderMessage * messages = queue->messages;
+  struct LGMPHeaderMessage * msg = &messages[queue->position];
 
   if (!(atomic_load_explicit(&msg->pendingSubs,
           memory_order_acquire) & bit))
@@ -598,13 +715,17 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
       return LGMP_ERR_QUEUE_UNSUBSCRIBED;
     }
 
-    const uint32_t count = atomic_load_explicit(&hq->count,
-        memory_order_relaxed);
-    const uint32_t mask = hq->numMessages - 1;
-    uint32_t pos = hq->start;
+    struct LGMPClientQueueState state;
+    if (unlikely(!snapshotClientQueueState(queue, &state)))
+    {
+      LGMP_QUEUE_UNLOCK(hq);
+      return LGMP_ERR_CORRUPTED;
+    }
+
+    uint32_t pos = state.start;
     msg = NULL;
 
-    for(uint32_t i = 0; i < count; ++i)
+    for(uint32_t i = 0; i < state.count; ++i)
     {
       if (atomic_load_explicit(&messages[pos].pendingSubs,
             memory_order_relaxed) & bit)
@@ -613,13 +734,12 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
         msg = &messages[pos];
         break;
       }
-      pos = (pos + 1) & mask;
+      pos = (pos + 1) & queue->messageMask;
     }
 
     if (!msg)
     {
-      queue->position = atomic_load_explicit(&hq->position,
-          memory_order_relaxed);
+      queue->position = state.position;
       LGMP_QUEUE_UNLOCK(hq);
       return LGMP_ERR_QUEUE_EMPTY;
     }
@@ -639,8 +759,7 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
   }
 
   LGMP_PREFETCH_R(msg, 3);
-  const uint32_t mask = hq->numMessages - 1;
-  uint32_t npos = (queue->position + 1) & mask;
+  uint32_t npos = (queue->position + 1) & queue->messageMask;
   LGMP_PREFETCH_R(&messages[npos], 2);
 
   result->udata = msg->udata;
@@ -698,15 +817,20 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
       return LGMP_ERR_INVALID_SESSION;
   }
 
-  struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
-    (queue->client->mem + hq->messagesOffset);
-  const uint32_t count = atomic_load_explicit(&hq->count,
-      memory_order_relaxed);
-  const uint32_t mask = hq->numMessages - 1;
-  uint32_t pos = hq->start;
+  struct LGMPClientQueueState state;
+  if (unlikely(!snapshotClientQueueState(queue, &state) ||
+        queue->position >= queue->numMessages))
+  {
+    LGMP_QUEUE_UNLOCK(hq);
+    return LGMP_ERR_CORRUPTED;
+  }
+
+  struct LGMPHeaderMessage * messages = queue->messages;
+  const uint32_t mask = queue->messageMask;
+  uint32_t pos = state.start;
   bool active = false;
 
-  for(uint32_t i = 0; i < count; ++i)
+  for(uint32_t i = 0; i < state.count; ++i)
   {
     if (pos == queue->position)
     {
@@ -743,20 +867,21 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
   if ((pending & ~bit) == 0)
   {
     // someone else may have done this before we got the lock, so check
-    if (hq->start != queue->position)
+    if (state.start != queue->position)
       goto done;
 
     // message finished
-    hq->start = (hq->start + 1) & mask;
+    hq->start = (state.start + 1) & mask;
 
     // decrement the count and update the timeout
     uint32_t oldCount = atomic_fetch_sub_explicit(&hq->count, 1,
         memory_order_acquire);
 
-    // check for underflow, this should never happen
-    if (unlikely(oldCount == 0))
+    // check for a concurrent corruption or underflow
+    if (unlikely(oldCount != state.count))
     {
-      atomic_store_explicit(&hq->count, 0, memory_order_release);
+      if (oldCount == 0)
+        atomic_store_explicit(&hq->count, 0, memory_order_release);
       LGMP_QUEUE_UNLOCK(hq);
       return LGMP_ERR_CORRUPTED;
     }
@@ -774,7 +899,7 @@ LGMP_STATUS lgmpClientMessageDone(PLGMPClientQueue queue)
 
 done:
   LGMP_QUEUE_UNLOCK(hq);
-  queue->position = (queue->position + 1) & (hq->numMessages - 1);
+  queue->position = (queue->position + 1) & mask;
   LGMP_PREFETCH_R(&messages[queue->position], 2);
 
   return LGMP_OK;
@@ -842,7 +967,11 @@ static LGMP_STATUS clientSendData(PLGMPClientQueue queue,
     return LGMP_ERR_QUEUE_UNSUBSCRIBED;
 
   // if there is no room, just return
-  if (unlikely(atomic_load_explicit(&hq->cMsgAvail, memory_order_acquire) == 0))
+  const uint32_t initialAvail =
+    atomic_load_explicit(&hq->cMsgAvail, memory_order_acquire);
+  if (unlikely(initialAvail > LGMP_MSGS_MAX))
+    return LGMP_ERR_CORRUPTED;
+  if (unlikely(initialAvail == 0))
     return LGMP_ERR_QUEUE_FULL;
 
   // lock the subscription and client message buffer
@@ -873,8 +1002,16 @@ static LGMP_STATUS clientSendData(PLGMPClientQueue queue,
     return LGMP_ERR_QUEUE_UNSUBSCRIBED;
   }
 
+  struct LGMPClientMessageState state;
+  if (unlikely(!snapshotClientMessageState(queue, &state)))
+  {
+    LGMP_UNLOCK(hq->cMsgLock);
+    LGMP_QUEUE_UNLOCK(hq);
+    return LGMP_ERR_CORRUPTED;
+  }
+
   // if there is now no room, unlock and return
-  if (unlikely(atomic_load_explicit(&hq->cMsgAvail, memory_order_relaxed) == 0))
+  if (unlikely(state.avail == 0))
   {
     LGMP_UNLOCK(hq->cMsgLock);
     LGMP_QUEUE_UNLOCK(hq);
@@ -882,7 +1019,7 @@ static LGMP_STATUS clientSendData(PLGMPClientQueue queue,
   }
 
   // get the write position and copy in the data
-  uint32_t wpos = atomic_load_explicit(&hq->cMsgWPos, memory_order_relaxed);
+  uint32_t wpos = state.wpos;
 
   LGMP_PREFETCH_W(&hq->cMsgs[wpos], 3);
   uint32_t wnext = (wpos + 1) & (LGMP_MSGS_MAX - 1);
