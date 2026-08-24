@@ -64,6 +64,7 @@ struct LGMPClient
   _Atomic(uint32_t) heartbeatLock;
   uint64_t          hosttime;
   uint64_t          lastHeartbeat;
+  size_t            firstMessageOffset;
   uint32_t          numQueues;
 
   struct LGMPClientQueue queues[LGMP_MAX_QUEUES];
@@ -107,6 +108,39 @@ static bool cacheClientQueue(PLGMPClient client, uint32_t index,
   queue->messages    = (struct LGMPHeaderMessage *)
     (client->mem + messagesOffset);
   return true;
+}
+
+static LGMP_STATUS refreshClientQueuesLocked(PLGMPClient client)
+{
+  struct LGMPHeader * header = client->header;
+  if (unlikely(client->sessionID != header->sessionID))
+    return LGMP_ERR_INVALID_SESSION;
+
+  const uint32_t numQueues = header->numQueues;
+  const uint32_t sessionUdataSize = header->udataSize;
+  if (numQueues > LGMP_MAX_QUEUES || numQueues < client->numQueues ||
+      sessionUdataSize > client->size - sizeof(*header) ||
+      sizeof(*header) + sessionUdataSize != client->firstMessageOffset)
+    return LGMP_ERR_CORRUPTED;
+
+  struct LGMPClientQueue queues[LGMP_MAX_QUEUES] = { 0 };
+  for(uint32_t i = client->numQueues; i < numQueues; ++i)
+    if (!cacheClientQueue(
+          client, i, client->firstMessageOffset, &queues[i]))
+      return LGMP_ERR_CORRUPTED;
+
+  if (unlikely(client->sessionID != header->sessionID))
+    return LGMP_ERR_INVALID_SESSION;
+  const uint32_t currentNumQueues = header->numQueues;
+  if (unlikely(currentNumQueues < numQueues ||
+        currentNumQueues > LGMP_MAX_QUEUES ||
+        sessionUdataSize != header->udataSize))
+    return LGMP_ERR_CORRUPTED;
+
+  for(uint32_t i = client->numQueues; i < numQueues; ++i)
+    client->queues[i] = queues[i];
+  client->numQueues = numQueues;
+  return LGMP_OK;
 }
 
 static bool snapshotClientQueueState(PLGMPClientQueue queue,
@@ -290,7 +324,9 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
     if (!cacheClientQueue(client, i, firstMessageOffset, &queues[i]))
       return LGMP_ERR_CORRUPTED;
 
-  if (unlikely(numQueues != header->numQueues ||
+  const uint32_t currentNumQueues = header->numQueues;
+  if (unlikely(currentNumQueues < numQueues ||
+        currentNumQueues > LGMP_MAX_QUEUES ||
         sessionUdataSize != header->udataSize))
     return LGMP_ERR_CORRUPTED;
 
@@ -304,13 +340,13 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
   if (unlikely(sessionID != header->sessionID))
     return LGMP_ERR_INVALID_SESSION;
 
-  memcpy(client->queues, queues, sizeof(client->queues));
-
   LGMP_LOCK(client->heartbeatLock);
-  client->sessionID     = sessionID;
-  client->hosttime      = timestamp;
-  client->lastHeartbeat = lgmpGetClockMS();
-  client->numQueues     = numQueues;
+  memcpy(client->queues, queues, sizeof(client->queues));
+  client->sessionID          = sessionID;
+  client->hosttime           = timestamp;
+  client->lastHeartbeat      = lgmpGetClockMS();
+  client->firstMessageOffset = firstMessageOffset;
+  client->numQueues          = numQueues;
   LGMP_UNLOCK(client->heartbeatLock);
 
   if (udataSize) *udataSize = sessionUdataSize;
@@ -406,10 +442,15 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
 
   *result = NULL;
 
-  if (unlikely(client->sessionID != client->header->sessionID))
-    return LGMP_ERR_INVALID_SESSION;
-
   PLGMPClientQueue q = NULL;
+  LGMP_LOCK(client->heartbeatLock);
+  const LGMP_STATUS refresh = refreshClientQueuesLocked(client);
+  if (refresh != LGMP_OK)
+  {
+    LGMP_UNLOCK(client->heartbeatLock);
+    return refresh;
+  }
+
   uint32_t queueIndex;
   for(queueIndex = 0; queueIndex < client->numQueues; ++queueIndex)
     if (client->queues[queueIndex].queueID == queueID)
@@ -417,6 +458,7 @@ LGMP_STATUS lgmpClientSubscribe(PLGMPClient client, uint32_t queueID,
       q = &client->queues[queueIndex];
       break;
     }
+  LGMP_UNLOCK(client->heartbeatLock);
 
   if (!q)
     return LGMP_ERR_NO_SUCH_QUEUE;
