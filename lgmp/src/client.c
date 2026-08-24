@@ -158,6 +158,23 @@ static void clearSubscriberMessages(PLGMPClientQueue queue, uint32_t bit)
         memory_order_relaxed);
 }
 
+static bool snapshotClientPayload(PLGMPClientQueue queue,
+    const struct LGMPHeaderMessage * message, PLGMPMessage result)
+{
+  const uint64_t udata = message->udata;
+  const uint32_t size = message->size;
+  const size_t offset = message->offset;
+
+  if (offset > queue->client->size ||
+      size > queue->client->size - offset)
+    return false;
+
+  result->udata = udata;
+  result->size  = size;
+  result->mem   = queue->client->mem + offset;
+  return true;
+}
+
 LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
 {
   assert(mem);
@@ -744,9 +761,11 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
       return LGMP_ERR_QUEUE_EMPTY;
     }
 
-    result->udata = msg->udata;
-    result->size  = msg->size;
-    result->mem   = queue->client->mem + msg->offset;
+    if (unlikely(!snapshotClientPayload(queue, msg, result)))
+    {
+      LGMP_QUEUE_UNLOCK(hq);
+      return LGMP_ERR_CORRUPTED;
+    }
 
     if (unlikely(queue->client->sessionID != queue->header->sessionID))
     {
@@ -762,9 +781,8 @@ LGMP_STATUS lgmpClientProcess(PLGMPClientQueue queue, PLGMPMessage result)
   uint32_t npos = (queue->position + 1) & queue->messageMask;
   LGMP_PREFETCH_R(&messages[npos], 2);
 
-  result->udata = msg->udata;
-  result->size  = msg->size;
-  result->mem   = queue->client->mem + msg->offset;
+  if (unlikely(!snapshotClientPayload(queue, msg, result)))
+    return LGMP_ERR_CORRUPTED;
 
   if (unlikely(queue->client->sessionID != queue->header->sessionID))
     return LGMP_ERR_INVALID_SESSION;
