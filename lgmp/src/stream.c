@@ -36,6 +36,8 @@ struct LGMPStreamLocal
 {
   struct LGMPStreamShared     * shared;
   struct LGMPStreamDescriptor   descriptor;
+  uint8_t                     * slots;
+  uint32_t                      slotStride;
   uint32_t                    * sessionID;
   uint32_t                      expectedSessionID;
   uint32_t                      expectedClientID;
@@ -203,9 +205,9 @@ static LGMP_STATUS calculateGeometry(uint32_t slotCount, uint32_t slotSize,
 static LGMP_STATUS validateDescriptor(
     const struct LGMPStreamDescriptor * descriptor, const uint8_t * memory,
     size_t memorySize, uint32_t sessionID,
-    struct LGMPStreamShared ** sharedResult)
+    struct LGMPStreamShared ** sharedResult, uint32_t * slotStrideResult)
 {
-  if (!descriptor || !memory || !sharedResult)
+  if (!descriptor || !memory || !sharedResult || !slotStrideResult)
     return LGMP_ERR_INVALID_ARGUMENT;
 
   if (descriptor->magic != LGMP_STREAM_DESCRIPTOR_MAGIC)
@@ -257,18 +259,21 @@ static LGMP_STATUS validateDescriptor(
     return LGMP_ERR_CORRUPTED;
 
   *sharedResult = shared;
+  *slotStrideResult = slotStride;
   return LGMP_OK;
 }
 
 static void initLocal(struct LGMPStreamLocal * local,
     struct LGMPStreamShared * shared,
-    const struct LGMPStreamDescriptor * descriptor, uint32_t * sessionID,
-    uint32_t expectedSessionID, uint32_t expectedClientID,
-    uint32_t expectedEpoch, bool hostSide)
+    const struct LGMPStreamDescriptor * descriptor, uint32_t slotStride,
+    uint32_t * sessionID, uint32_t expectedSessionID,
+    uint32_t expectedClientID, uint32_t expectedEpoch, bool hostSide)
 {
   memset(local, 0, sizeof(*local));
   local->shared             = shared;
   local->descriptor         = *descriptor;
+  local->slots              = (uint8_t *)shared + sizeof(*shared);
+  local->slotStride         = slotStride;
   local->sessionID          = sessionID;
   local->expectedSessionID  = expectedSessionID;
   local->expectedClientID   = expectedClientID;
@@ -415,11 +420,10 @@ static void abandonLocalOperations(struct LGMPStreamLocal * local)
 static struct LGMPStreamSlot * getSlot(struct LGMPStreamLocal * local,
     uint64_t ticket)
 {
-  uint8_t * base = (uint8_t *)local->shared;
   const uint32_t index = ticketSequence(ticket) &
     (local->descriptor.slotCount - 1U);
-  return (struct LGMPStreamSlot *)(base + local->shared->slotsOffset +
-      (size_t)index * local->shared->slotStride);
+  return (struct LGMPStreamSlot *)(local->slots +
+      (size_t)index * local->slotStride);
 }
 
 static void notifyPeer(struct LGMPStreamLocal * local, uint32_t reasons)
@@ -638,9 +642,12 @@ static LGMP_STATUS readPeek(struct LGMPStreamLocal * local,
   }
 
   struct LGMPStreamSlot * slot = getSlot(local, consumer);
-  if (unlikely(slot->epoch != ticketEpoch(consumer) ||
-      slot->ticket != ticketSequence(consumer) ||
-      slot->length > local->descriptor.slotSize))
+  const uint32_t slotEpoch  = slot->epoch;
+  const uint32_t slotTicket = slot->ticket;
+  const uint32_t slotLength = slot->length;
+  if (unlikely(slotEpoch != ticketEpoch(consumer) ||
+      slotTicket != ticketSequence(consumer) ||
+      slotLength > local->descriptor.slotSize))
   {
     endOperation(local, false);
     return LGMP_ERR_CORRUPTED;
@@ -653,7 +660,7 @@ static LGMP_STATUS readPeek(struct LGMPStreamLocal * local,
 
   buffer->data      = data;
   buffer->capacity  = local->descriptor.slotSize;
-  buffer->size      = slot->length;
+  buffer->size      = slotLength;
   buffer->_ticket   = consumer;
   buffer->_epoch    = local->expectedEpoch;
   return LGMP_OK;
@@ -775,8 +782,8 @@ LGMP_STATUS lgmpHostStreamNew(PLGMPHost host,
   descriptor.slotCount  = config.slotCount;
   descriptor.slotSize   = config.slotSize;
 
-  initLocal(&stream->local, shared, &descriptor, sessionID, *sessionID, 0, 0,
-      true);
+  initLocal(&stream->local, shared, &descriptor, slotStride, sessionID,
+      *sessionID, 0, 0, true);
   streamPublish(&shared->magic, LGMP_STREAM_SHARED_MAGIC);
   *result = stream;
   return LGMP_OK;
@@ -1060,6 +1067,12 @@ LGMP_STATUS lgmpClientStreamAttach(PLGMPClient client,
   assert(result);
   *result = NULL;
 
+  if (!descriptor)
+    return LGMP_ERR_INVALID_ARGUMENT;
+
+  struct LGMPStreamDescriptor descriptorSnapshot;
+  memcpy(&descriptorSnapshot, descriptor, sizeof(descriptorSnapshot));
+
   uint8_t * memory;
   size_t memorySize;
   uint32_t * sessionID;
@@ -1070,8 +1083,9 @@ LGMP_STATUS lgmpClientStreamAttach(PLGMPClient client,
     return status;
 
   struct LGMPStreamShared * shared;
-  status = validateDescriptor(descriptor, memory, memorySize, *sessionID,
-      &shared);
+  uint32_t slotStride;
+  status = validateDescriptor(&descriptorSnapshot, memory, memorySize,
+      *sessionID, &shared, &slotStride);
   if (status != LGMP_OK)
     return status;
 
@@ -1079,8 +1093,8 @@ LGMP_STATUS lgmpClientStreamAttach(PLGMPClient client,
   if (!stream)
     return LGMP_ERR_NO_MEM;
 
-  initLocal(&stream->local, shared, descriptor, sessionID, *sessionID,
-      clientID, 0, false);
+  initLocal(&stream->local, shared, &descriptorSnapshot, slotStride,
+      sessionID, *sessionID, clientID, 0, false);
 
   status = clientActivate(&stream->local, NULL);
   if (status != LGMP_OK && status != LGMP_ERR_STREAM_UNBOUND &&
