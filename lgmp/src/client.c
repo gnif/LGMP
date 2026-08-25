@@ -131,8 +131,9 @@ static LGMP_STATUS refreshClientQueuesLocked(PLGMPClient client)
   lgmpSharedReadFence();
   const uint32_t sessionUdataSize = header->udataSize;
   if (numQueues > LGMP_MAX_QUEUES || numQueues < client->numQueues ||
-      sessionUdataSize > client->size - sizeof(*header) ||
-      sizeof(*header) + sessionUdataSize != client->firstMessageOffset)
+      sessionUdataSize > client->size - LGMP_HEADER_DATA_OFFSET ||
+      LGMP_HEADER_DATA_OFFSET + sessionUdataSize !=
+        client->firstMessageOffset)
     return clientSessionMatches(client, client->sessionID) ?
       LGMP_ERR_CORRUPTED : LGMP_ERR_INVALID_SESSION;
 
@@ -309,11 +310,12 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
     return clientSessionMatches(client, sessionID) ?
       LGMP_ERR_CORRUPTED : LGMP_ERR_INVALID_SESSION;
 
-  if (sessionUdataSize > client->size - sizeof(*header))
+  if (sessionUdataSize > client->size - LGMP_HEADER_DATA_OFFSET)
     return clientSessionMatches(client, sessionID) ?
       LGMP_ERR_INVALID_SIZE : LGMP_ERR_INVALID_SESSION;
 
-  const size_t firstMessageOffset = sizeof(*header) + sessionUdataSize;
+  const size_t firstMessageOffset =
+    LGMP_HEADER_DATA_OFFSET + sessionUdataSize;
 
   uint64_t timestamp = atomic_load_explicit(&header->timestamp,
       memory_order_relaxed);

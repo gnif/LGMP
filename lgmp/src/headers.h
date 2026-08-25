@@ -210,26 +210,24 @@ static inline void lgmpSharedPublish32(uint32_t * value, uint32_t next)
 #  pragma pack(push, 8)
 #endif
 
-struct LGMPHeaderMessage
+struct ALIGNED_16 LGMPHeaderMessage
 {
   uint64_t udata;
   uint32_t size;
   uint32_t offset;
   _Atomic(uint32_t) pendingSubs;
   uint32_t _pad[3];
-}
-ALIGNED_16;
+};
 
-struct LGMPClientMessage
+struct ALIGNED_16 LGMPClientMessage
 {
   uint32_t size;
   uint32_t clientID;
   uint32_t _padSize[2];
   uint8_t  data[LGMP_MSGS_SIZE];
-}
-ALIGNED_16;
+};
 
-struct LGMPHeaderQueue
+struct ALIGNED_64 LGMPHeaderQueue
 {
   /* ---- Line 0: host-hot ring counters (64B) ---- */
   _Atomic(uint32_t) position;   /* tail: next write pos (host)   [4]  */
@@ -265,17 +263,20 @@ struct LGMPHeaderQueue
   uint32_t _padRO[2];         /* pad to 64 */
 
   struct LGMPClientMessage cMsgs[LGMP_MSGS_MAX];
-}
-ALIGNED_64;
+};
 
 #if defined(_MSC_VER)
 #  define LGMP_STATIC_ASSERT static_assert
+#  define LGMP_ALIGNOF(type) __alignof(type)
 #else
 #  define LGMP_STATIC_ASSERT _Static_assert
+#  define LGMP_ALIGNOF(type) __alignof__(type)
 #endif
 
 LGMP_STATIC_ASSERT(sizeof(struct LGMPHeaderMessage) == 32,
                    "LGMPHeaderMessage size must remain stable");
+LGMP_STATIC_ASSERT(LGMP_ALIGNOF(struct LGMPHeaderMessage) == 16,
+                   "LGMPHeaderMessage alignment must remain stable");
 LGMP_STATIC_ASSERT(offsetof(struct LGMPHeaderMessage, udata) == 0,
                    "LGMPHeaderMessage udata layout is invalid");
 LGMP_STATIC_ASSERT(offsetof(struct LGMPHeaderMessage, size) == 8,
@@ -287,8 +288,15 @@ LGMP_STATIC_ASSERT(offsetof(struct LGMPHeaderMessage, pendingSubs) == 16,
 
 LGMP_STATIC_ASSERT(sizeof(struct LGMPClientMessage) == 80,
                    "LGMPClientMessage size must remain unchanged");
+LGMP_STATIC_ASSERT(LGMP_ALIGNOF(struct LGMPClientMessage) == 16,
+                   "LGMPClientMessage alignment must remain unchanged");
 LGMP_STATIC_ASSERT(offsetof(struct LGMPClientMessage, data) == 16,
                    "LGMPClientMessage data layout must remain unchanged");
+
+LGMP_STATIC_ASSERT(sizeof(struct LGMPHeaderQueue) == 1600,
+                   "LGMPHeaderQueue size must remain stable");
+LGMP_STATIC_ASSERT(LGMP_ALIGNOF(struct LGMPHeaderQueue) == 64,
+                   "LGMPHeaderQueue alignment must remain stable");
 
 /* Sanity checks: keep the hot blocks on their own lines */
 /* ring invariants */
@@ -307,7 +315,7 @@ LGMP_STATIC_ASSERT((offsetof(struct LGMPHeaderQueue, cMsgLock) & 63) == 0,
   #pragma warning(disable: 4200)
 #endif
 
-struct LGMPHeader
+struct ALIGNED_64 LGMPHeader
 {
   /* ---- Line 0: session state + explicit pad to 64B ---- */
   _Atomic(uint64_t) timestamp;     /* 8 */
@@ -326,13 +334,20 @@ struct LGMPHeader
 
   /* must be last */
   uint8_t  udata[0];
-}
-ALIGNED_64;
+};
 
+LGMP_STATIC_ASSERT(sizeof(struct LGMPHeader) == 9728,
+                   "LGMPHeader size must remain stable");
+LGMP_STATIC_ASSERT(LGMP_ALIGNOF(struct LGMPHeader) == 64,
+                   "LGMPHeader alignment must remain stable");
 LGMP_STATIC_ASSERT((offsetof(struct LGMPHeader, timestamp) & 63) == 0,
                    "LGMPHeader.timestamp must begin a cache line");
 LGMP_STATIC_ASSERT((offsetof(struct LGMPHeader, queues) & 63) == 0,
                    "LGMPHeader.queues must be 64B-aligned");
+LGMP_STATIC_ASSERT(offsetof(struct LGMPHeader, udata) == 9684,
+                   "LGMPHeader udata layout must remain stable");
+
+#define LGMP_HEADER_DATA_OFFSET offsetof(struct LGMPHeader, udata)
 
 #ifdef _MSC_VER
   #pragma warning(pop)

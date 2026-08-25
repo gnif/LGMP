@@ -48,22 +48,21 @@ struct LGMPStreamCursorValue
   _Atomic(uint32_t) sequence;
 };
 
-struct LGMPStreamCursor
+struct ALIGNED_64 LGMPStreamCursor
 {
   _Atomic(uint32_t) stamp;
   _Atomic(uint32_t) active[2];
   uint32_t          _padStamp;
   struct LGMPStreamCursorValue value[2];
   uint32_t          _pad[8];
-}
-ALIGNED_64;
+};
 
 /*
  * The immutable geometry, host-owned binding, producer cursor, and consumer
  * cursor each occupy independent cache lines. A stream is SPSC after binding,
  * so publication needs no shared lock or read-modify-write operation.
  */
-struct LGMPStreamShared
+struct ALIGNED_64 LGMPStreamShared
 {
   /* ---- Line 0: immutable geometry ---- */
   _Atomic(uint32_t) magic;
@@ -90,27 +89,31 @@ struct LGMPStreamShared
 
   /* ---- Line 3: consumer-owned cursor ---- */
   struct LGMPStreamCursor consumer;
-}
-ALIGNED_64;
+};
 
-struct LGMPStreamSlot
+struct ALIGNED_64 LGMPStreamSlot
 {
   uint32_t epoch;
   uint32_t ticket;
   uint32_t length;
   uint32_t _reserved;
   uint8_t  _pad[48];
-}
-ALIGNED_64;
+};
 
 LGMP_STATIC_ASSERT(sizeof(struct LGMPStreamDescriptor) == 32,
     "LGMPStreamDescriptor size must remain stable");
 LGMP_STATIC_ASSERT(sizeof(struct LGMPStreamCursor) == 64,
     "LGMPStreamCursor size must remain stable");
+LGMP_STATIC_ASSERT(LGMP_ALIGNOF(struct LGMPStreamCursor) == 64,
+    "LGMPStreamCursor alignment must remain stable");
 LGMP_STATIC_ASSERT(sizeof(struct LGMPStreamShared) == 256,
     "LGMPStreamShared size must remain stable");
+LGMP_STATIC_ASSERT(LGMP_ALIGNOF(struct LGMPStreamShared) == 64,
+    "LGMPStreamShared alignment must remain stable");
 LGMP_STATIC_ASSERT(sizeof(struct LGMPStreamSlot) == 64,
     "LGMPStreamSlot size must remain stable");
+LGMP_STATIC_ASSERT(LGMP_ALIGNOF(struct LGMPStreamSlot) == 64,
+    "LGMPStreamSlot alignment must remain stable");
 LGMP_STATIC_ASSERT(offsetof(struct LGMPStreamShared, state) == 64,
     "stream binding must begin a cache line");
 LGMP_STATIC_ASSERT(offsetof(struct LGMPStreamShared, producer) == 128,
