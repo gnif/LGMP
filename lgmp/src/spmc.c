@@ -61,6 +61,7 @@ struct LGMPClientSPMC
   uint32_t                      expectedClientID;
   uint32_t                      expectedEpoch;
   uint64_t                      pendingSkipped;
+  _Atomic(uint32_t)             operationActive;
 };
 
 static uint32_t spmcObserve(_Atomic(uint32_t) * value)
@@ -289,9 +290,17 @@ static LGMP_STATUS validateClientBinding(
 
 static LGMP_STATUS beginClientOperation(struct LGMPClientSPMC * stream)
 {
+  if (atomic_exchange_explicit(&stream->operationActive, 1U,
+        memory_order_acquire) != 0U)
+    return LGMP_ERR_STREAM_BUSY;
+
   LGMP_STATUS status = validateClientBinding(stream);
   if (status != LGMP_OK)
+  {
+    atomic_exchange_explicit(&stream->operationActive, 0U,
+        memory_order_release);
     return status;
+  }
 
   _Atomic(uint32_t) * active =
     &stream->reader->active[stream->expectedEpoch & 1U];
@@ -302,21 +311,32 @@ static LGMP_STATUS beginClientOperation(struct LGMPClientSPMC * stream)
   {
     if (status != LGMP_ERR_INVALID_SESSION)
       spmcPublish(active, 0U);
+    atomic_exchange_explicit(&stream->operationActive, 0U,
+        memory_order_release);
     return status;
   }
 
   if (spmcObserve(active) != stream->expectedEpoch)
   {
     spmcPublish(active, 0U);
+    atomic_exchange_explicit(&stream->operationActive, 0U,
+        memory_order_release);
     return LGMP_ERR_CORRUPTED;
   }
 
   return LGMP_OK;
 }
 
+static void unlockClientOperation(struct LGMPClientSPMC * stream)
+{
+  atomic_exchange_explicit(&stream->operationActive, 0U,
+      memory_order_release);
+}
+
 static void endClientOperation(struct LGMPClientSPMC * stream)
 {
   spmcPublish(&stream->reader->active[stream->expectedEpoch & 1U], 0U);
+  unlockClientOperation(stream);
 }
 
 static uint64_t addSkipped(uint64_t current, uint64_t additional)
@@ -476,7 +496,9 @@ LGMP_STATUS lgmpHostSPMCReaderBind(PLGMPHostSPMC stream, uint32_t clientID,
   spmcPublish(&reader->state, LGMP_SPMC_READER_BINDING);
   if (readerHasActiveOperation(reader))
   {
-    spmcPublish(&reader->state, LGMP_SPMC_READER_DRAINING);
+    /* The activity belongs to a stale operation from the prior binding.
+     * Leave its marker intact, but make the slot claimable once it clears. */
+    spmcPublish(&reader->state, LGMP_SPMC_READER_UNBOUND);
     return LGMP_ERR_STREAM_BUSY;
   }
 
@@ -875,6 +897,8 @@ LGMP_STATUS lgmpClientSPMCAttach(PLGMPClient client,
   stream->reader = &stream->local.readers[readerID];
   stream->readerID = readerID;
   stream->expectedClientID = clientID;
+  atomic_store_explicit(&stream->operationActive, 0U,
+      memory_order_relaxed);
 
   status = clientActivate(stream, NULL);
   if (status != LGMP_OK && status != LGMP_ERR_STREAM_UNBOUND &&
@@ -961,6 +985,8 @@ LGMP_STATUS lgmpClientSPMCSync(PLGMPClientSPMC stream,
   {
     if (status != LGMP_ERR_INVALID_SESSION)
       endClientOperation(stream);
+    else
+      unlockClientOperation(stream);
     return status;
   }
 
@@ -1067,6 +1093,8 @@ LGMP_STATUS lgmpClientSPMCRead(PLGMPClientSPMC stream, void * data,
       {
         if (status != LGMP_ERR_INVALID_SESSION)
           endClientOperation(stream);
+        else
+          unlockClientOperation(stream);
         return status;
       }
 
@@ -1115,6 +1143,8 @@ LGMP_STATUS lgmpClientSPMCRead(PLGMPClientSPMC stream, void * data,
     {
       if (status != LGMP_ERR_INVALID_SESSION)
         endClientOperation(stream);
+      else
+        unlockClientOperation(stream);
       return status;
     }
 

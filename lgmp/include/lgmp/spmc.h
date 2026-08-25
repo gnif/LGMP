@@ -138,6 +138,8 @@ LGMP_STATUS lgmpClientSPMCGetBinding(PLGMPClientSPMC stream,
     uint32_t * clientID, uint32_t * epoch);
 
 /* Advance this reader to the current producer head without reading data. */
+/* Read and Sync are mutually exclusive per client handle. An overlapping
+ * operation returns LGMP_ERR_STREAM_BUSY without touching shared state. */
 LGMP_STATUS lgmpClientSPMCSync(PLGMPClientSPMC stream,
     uint64_t * skipped);
 LGMP_STATUS lgmpClientSPMCRead(PLGMPClientSPMC stream, void * data,
