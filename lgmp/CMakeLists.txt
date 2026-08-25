@@ -7,6 +7,7 @@ set(SOURCES
 	src/host.c
 	src/client.c
 	src/status.c
+	src/spmc.c
 	src/stream.c
 )
 

@@ -40,6 +40,8 @@ typedef struct LGMPClientQueue  * PLGMPClientQueue;
 typedef struct LGMPMemory       * PLGMPMemory;
 typedef struct LGMPHostStream   * PLGMPHostStream;
 typedef struct LGMPClientStream * PLGMPClientStream;
+typedef struct LGMPHostSPMC     * PLGMPHostSPMC;
+typedef struct LGMPClientSPMC   * PLGMPClientSPMC;
 
 #ifdef __cplusplus
 }

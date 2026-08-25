@@ -21,6 +21,9 @@
     <ClCompile Include="lgmp\src\host.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="lgmp\src\spmc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="lgmp\src\status.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -32,6 +35,9 @@
     <ClInclude Include="lgmp\src\lgmp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="lgmp\src\spmc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="lgmp\include\lgmp\client.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -39,6 +45,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="lgmp\include\lgmp\lgmp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lgmp\include\lgmp\spmc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="lgmp\include\lgmp\status.h">
