@@ -146,6 +146,51 @@
 #endif
 #define LGMP_PREFETCH_DIST 2
 
+/*
+ * The shared mapping may be write-combined. C acquire/release operations do
+ * not drain WC stores on every supported compiler, so shared publications
+ * need explicit hardware fences as well.
+ */
+static inline void lgmpSharedWriteFence(void)
+{
+#if defined(_MSC_VER)
+  MemoryBarrier();
+#elif defined(__x86_64__) || defined(__i386__)
+  atomic_signal_fence(memory_order_seq_cst);
+  _mm_sfence();
+  atomic_signal_fence(memory_order_seq_cst);
+#else
+  atomic_thread_fence(memory_order_seq_cst);
+#endif
+}
+
+static inline void lgmpSharedReadFence(void)
+{
+#if defined(_MSC_VER)
+  MemoryBarrier();
+#elif defined(__x86_64__) || defined(__i386__)
+  atomic_signal_fence(memory_order_seq_cst);
+  _mm_lfence();
+  atomic_signal_fence(memory_order_seq_cst);
+#else
+  atomic_thread_fence(memory_order_seq_cst);
+#endif
+}
+
+static inline uint32_t lgmpSharedObserve32(const uint32_t * value)
+{
+  const uint32_t result = *(const volatile uint32_t *)value;
+  lgmpSharedReadFence();
+  return result;
+}
+
+static inline void lgmpSharedPublish32(uint32_t * value, uint32_t next)
+{
+  lgmpSharedWriteFence();
+  *(volatile uint32_t *)value = next;
+  lgmpSharedWriteFence();
+}
+
 #define LGMP_IS_POW2(x) ((x) && (((x) & ((x) - 1)) == 0))
 
 #define LGMP_QUEUE_LOCK(hq) LGMP_LOCK(hq->lock)
@@ -276,7 +321,7 @@ struct LGMPHeader
   uint32_t magic;
   uint32_t version;
   uint32_t sessionID;
-  uint32_t numQueues;
+  _Atomic(uint32_t) numQueues;
   uint32_t udataSize;
 
   /* must be last */

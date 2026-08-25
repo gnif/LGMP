@@ -67,49 +67,18 @@ struct LGMPClientStream
   struct LGMPStreamLocal local;
 };
 
-/*
- * The primary LGMP mapping may be write-combined. A C acquire/release pair is
- * not sufficient to drain WC stores on all supported compilers, so publishing
- * a cursor also includes an explicit hardware fence. Cursor updates remain
- * ordinary single-writer stores; there is no shared read-modify-write in the
- * stream hot path.
- */
-static void streamWriteFence(void)
-{
-#if defined(_MSC_VER)
-  MemoryBarrier();
-#elif defined(__x86_64__) || defined(__i386__)
-  _mm_sfence();
-  atomic_thread_fence(memory_order_release);
-#else
-  atomic_thread_fence(memory_order_seq_cst);
-#endif
-}
-
-static void streamReadFence(void)
-{
-#if defined(_MSC_VER)
-  MemoryBarrier();
-#elif defined(__x86_64__) || defined(__i386__)
-  atomic_thread_fence(memory_order_acquire);
-  _mm_lfence();
-#else
-  atomic_thread_fence(memory_order_seq_cst);
-#endif
-}
-
 static uint32_t streamObserve(_Atomic(uint32_t) * value)
 {
   const uint32_t result = atomic_load_explicit(value, memory_order_acquire);
-  streamReadFence();
+  lgmpSharedReadFence();
   return result;
 }
 
 static void streamPublish(_Atomic(uint32_t) * value, uint32_t next)
 {
-  streamWriteFence();
+  lgmpSharedWriteFence();
   atomic_store_explicit(value, next, memory_order_release);
-  streamWriteFence();
+  lgmpSharedWriteFence();
 }
 
 static bool streamObserveCursor(struct LGMPStreamCursor * cursor,
@@ -123,7 +92,7 @@ static bool streamObserveCursor(struct LGMPStreamCursor * cursor,
         &cursor->value[index].epoch, memory_order_relaxed);
     const uint32_t sequence = atomic_load_explicit(
         &cursor->value[index].sequence, memory_order_relaxed);
-    streamReadFence();
+    lgmpSharedReadFence();
     const uint32_t after    = streamObserve(&cursor->stamp);
     if (before == after)
     {
@@ -894,7 +863,7 @@ LGMP_STATUS lgmpHostStreamUnbind(PLGMPHostStream stream)
 
   streamPublish(&local->shared->state, LGMP_STREAM_STATE_UNBOUND);
   atomic_store_explicit(&local->shared->clientID, 0, memory_order_relaxed);
-  streamWriteFence();
+  lgmpSharedWriteFence();
 
   local->expectedClientID = 0;
   local->expectedEpoch    = 0;

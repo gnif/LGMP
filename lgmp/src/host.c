@@ -73,15 +73,22 @@ void lgmpHostGetMemoryContext(PLGMPHost host, uint8_t ** mem, size_t * size,
 
 static void initHeader(PLGMPHost host)
 {
+  lgmpSharedPublish32(&host->header->magic, 0);
+  lgmpSharedPublish32(&host->header->sessionID, 0);
+
   host->header->timestamp = lgmpGetClockMS();
+  atomic_store_explicit(&host->header->nextClientID, 0,
+      memory_order_relaxed);
   host->header->version   = LGMP_PROTOCOL_VERSION;
-  host->header->numQueues = host->numQueues;
+  atomic_store_explicit(&host->header->numQueues, host->numQueues,
+      memory_order_relaxed);
   host->header->udataSize = host->udataSize;
   memcpy(host->header->udata, host->udata, host->udataSize);
 
   // this must be set last to ensure a client doesn't read invalid data before
   // we're ready
-  host->header->magic = LGMP_PROTOCOL_MAGIC;
+  lgmpSharedPublish32(&host->header->sessionID, host->sessionID);
+  lgmpSharedPublish32(&host->header->magic, LGMP_PROTOCOL_MAGIC);
   host->lastTimestamp = host->header->timestamp;
 }
 
@@ -126,14 +133,11 @@ LGMP_STATUS lgmpHostInit(void *mem, const uint32_t size, PLGMPHost * result,
 
   // ensure the sessionID changes so that clients can determine if the host was
   // restarted.
-  const uint32_t sessionID = host->header->sessionID;
-  host->sessionID = rand();
-  while(sessionID == host->sessionID)
+  const uint32_t sessionID =
+    lgmpSharedObserve32(&host->header->sessionID);
+  do
     host->sessionID = rand();
-
-  atomic_store_explicit(&host->header->nextClientID, 0,
-      memory_order_relaxed);
-  host->header->sessionID = host->sessionID;
+  while(!host->sessionID || sessionID == host->sessionID);
 
   initHeader(host);
   return LGMP_OK;
@@ -175,7 +179,7 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   if (host->avail < needed)
     return LGMP_ERR_NO_SHARED_MEM;
 
-  const unsigned idx = host->numQueues++;
+  const unsigned idx = host->numQueues;
   *result = &host->queues[idx];
   PLGMPHostQueue queue = *result;
 
@@ -212,7 +216,11 @@ LGMP_STATUS lgmpHostQueueNew(PLGMPHost host, const struct LGMPQueueConfig config
   host->avail    -= ALIGN_TO(msgBytes, CACHELINE);
   host->nextFree += ALIGN_TO(msgBytes, CACHELINE);
 
-  ++host->header->numQueues;
+  ++host->numQueues;
+  lgmpSharedWriteFence();
+  atomic_store_explicit(&host->header->numQueues, host->numQueues,
+      memory_order_release);
+  lgmpSharedWriteFence();
   return LGMP_OK;
 }
 
