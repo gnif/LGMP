@@ -55,8 +55,8 @@ LGMP_STATUS lgmpClientGetMemoryContext(PLGMPClient client, uint8_t ** mem,
 static inline bool lgmpClockReadMS(uint64_t * result)
 {
 #if defined(_WIN32)
-  LARGE_INTEGER frequency;
-  LARGE_INTEGER counter;
+  LARGE_INTEGER frequency = { 0 };
+  LARGE_INTEGER counter   = { 0 };
   if (!QueryPerformanceFrequency(&frequency) ||
       !QueryPerformanceCounter(&counter) ||
       frequency.QuadPart <= 0 || counter.QuadPart < 0)
