@@ -21,8 +21,6 @@
 
 #include "test_support.h"
 
-#include <pthread.h>
-#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,15 +32,15 @@
 
 struct Producer
 {
-  PLGMPHostQueue  queue;
-  PLGMPMemory     payload;
-  atomic_bool     cancel;
-  LGMP_STATUS     status;
-  uint32_t        produced;
-  uint64_t        deadline;
+  PLGMPHostQueue         queue;
+  PLGMPMemory            payload;
+  struct TestAtomicBool  cancel;
+  LGMP_STATUS            status;
+  uint32_t               produced;
+  uint64_t               deadline;
 };
 
-static void * producerThread(void * opaque)
+static void produceMessages(void * opaque)
 {
   struct Producer * producer = opaque;
   producer->status = LGMP_OK;
@@ -50,8 +48,8 @@ static void * producerThread(void * opaque)
   for(uint32_t sequence = 1U;
       sequence <= TEST_CONCURRENT_MESSAGES;)
   {
-    if (atomic_load_explicit(&producer->cancel, memory_order_relaxed))
-      return NULL;
+    if (testAtomicBoolLoad(&producer->cancel))
+      return;
 
     const LGMP_STATUS status = lgmpHostQueuePost(producer->queue, sequence,
         producer->payload);
@@ -65,28 +63,26 @@ static void * producerThread(void * opaque)
     if (status != LGMP_ERR_QUEUE_FULL)
     {
       producer->status = status;
-      return NULL;
+      return;
     }
 
     uint64_t now;
     if (!testMonotonicMS(&now))
     {
       producer->status = LGMP_ERR_CLOCK_FAILURE;
-      return NULL;
+      return;
     }
     if (now >= producer->deadline)
     {
       producer->status = LGMP_ERR_QUEUE_TIMEOUT;
-      return NULL;
+      return;
     }
     if (!testSleepMS(1U))
     {
       producer->status = LGMP_ERR_CLOCK_FAILURE;
-      return NULL;
+      return;
     }
   }
-
-  return NULL;
 }
 
 int main(void)
@@ -98,8 +94,7 @@ int main(void)
   PLGMPClientQueue   clientQueue     = NULL;
   PLGMPMemory        payload         = NULL;
   uint32_t           clientID        = 0U;
-  pthread_t          producerHandle;
-  bool               producerStarted = false;
+  struct TestThread  producerThread   = { 0 };
   struct Producer    producer         = { 0 };
 
   const struct LGMPQueueConfig config =
@@ -134,16 +129,10 @@ int main(void)
   producer.status   = LGMP_OK;
   producer.produced = 0U;
   producer.deadline = start + TEST_CONCURRENT_TIMEOUT;
-  atomic_init(&producer.cancel, false);
+  testAtomicBoolInit(&producer.cancel, false);
 
-  const int createError = pthread_create(&producerHandle, NULL,
-      producerThread, &producer);
-  if (createError != 0)
-  {
-    fprintf(stderr, "pthread_create failed with error %d\n", createError);
+  if (!testThreadStart(&producerThread, produceMessages, &producer))
     goto cleanup;
-  }
-  producerStarted = true;
 
   uint32_t consumed = 0U;
   while(consumed < TEST_CONCURRENT_MESSAGES)
@@ -179,13 +168,8 @@ int main(void)
       goto cleanup;
   }
 
-  const int joinError = pthread_join(producerHandle, NULL);
-  if (joinError != 0)
-  {
-    fprintf(stderr, "pthread_join failed with error %d\n", joinError);
+  if (!testThreadJoin(&producerThread))
     goto cleanup;
-  }
-  producerStarted = false;
 
   if (!testExpectStatus("concurrent producer", producer.status, LGMP_OK) ||
       !TEST_CHECK(producer.produced == TEST_CONCURRENT_MESSAGES) ||
@@ -196,17 +180,11 @@ int main(void)
   result = EXIT_SUCCESS;
 
 cleanup:
-  if (producerStarted)
+  if (producerThread.started)
   {
-    atomic_store_explicit(&producer.cancel, true, memory_order_relaxed);
-    const int cleanupJoinError = pthread_join(producerHandle, NULL);
-    if (cleanupJoinError != 0)
-    {
-      fprintf(stderr, "pthread_join failed with error %d\n",
-          cleanupJoinError);
+    testAtomicBoolStore(&producer.cancel, true);
+    if (!testThreadJoin(&producerThread))
       return EXIT_FAILURE;
-    }
-    producerStarted = false;
   }
   if (clientQueue &&
       !testExpectStatus("cleanup lgmpClientUnsubscribe",

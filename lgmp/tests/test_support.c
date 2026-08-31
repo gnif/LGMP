@@ -19,7 +19,9 @@
  * Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
+#if !defined(_WIN32)
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "test_support.h"
 
@@ -27,14 +29,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(_WIN32)
+#include <process.h>
+#include <windows.h>
+#else
 #include <time.h>
+#endif
 
 const uint8_t testSessionUdata[] =
 {
   0x4cU, 0x47U, 0x4dU, 0x50U, 0x12U, 0x34U
 };
 
-const uint32_t testSessionUdataSize = sizeof(testSessionUdata);
+const uint32_t testSessionUdataSize = (uint32_t)sizeof(testSessionUdata);
 
 bool testCheck(bool condition, const char * expression,
     const char * file, unsigned int line)
@@ -62,9 +70,146 @@ size_t testHostAllocationSize(size_t requestedSize)
   return (requestedSize + 3U) & ~(size_t)3U;
 }
 
+void testAtomicBoolInit(struct TestAtomicBool * value, bool initial)
+{
+#if defined(_WIN32)
+  InterlockedExchange(&value->value, initial ? 1L : 0L);
+#else
+  atomic_init(&value->value, initial);
+#endif
+}
+
+bool testAtomicBoolLoad(struct TestAtomicBool * value)
+{
+#if defined(_WIN32)
+  return InterlockedCompareExchange(&value->value, 0L, 0L) != 0L;
+#else
+  return atomic_load_explicit(&value->value, memory_order_relaxed);
+#endif
+}
+
+void testAtomicBoolStore(struct TestAtomicBool * value, bool next)
+{
+#if defined(_WIN32)
+  InterlockedExchange(&value->value, next ? 1L : 0L);
+#else
+  atomic_store_explicit(&value->value, next, memory_order_relaxed);
+#endif
+}
+
+#if defined(_WIN32)
+static unsigned __stdcall testThreadEntry(void * opaque)
+#else
+static void * testThreadEntry(void * opaque)
+#endif
+{
+  struct TestThread * thread = opaque;
+  thread->function(thread->opaque);
+
+#if defined(_WIN32)
+  return 0U;
+#else
+  return NULL;
+#endif
+}
+
+bool testThreadStart(struct TestThread * thread,
+    TestThreadFunction function, void * opaque)
+{
+  if (thread->started)
+  {
+    fprintf(stderr, "testThreadStart: thread is already running\n");
+    return false;
+  }
+
+  thread->function = function;
+  thread->opaque   = opaque;
+
+#if defined(_WIN32)
+  const uintptr_t handle = _beginthreadex(NULL, 0U, testThreadEntry,
+      thread, 0U, NULL);
+  if (handle == 0U)
+  {
+    fprintf(stderr, "_beginthreadex failed with error %d\n", errno);
+    thread->function = NULL;
+    thread->opaque   = NULL;
+    return false;
+  }
+  thread->handle = handle;
+#else
+  const int error = pthread_create(&thread->handle, NULL, testThreadEntry,
+      thread);
+  if (error != 0)
+  {
+    fprintf(stderr, "pthread_create: %s\n", strerror(error));
+    thread->function = NULL;
+    thread->opaque   = NULL;
+    return false;
+  }
+#endif
+
+  thread->started = true;
+  return true;
+}
+
+bool testThreadJoin(struct TestThread * thread)
+{
+  if (!thread->started)
+    return true;
+
+#if defined(_WIN32)
+  const HANDLE handle     = (HANDLE)thread->handle;
+  const DWORD  waitResult = WaitForSingleObject(handle, INFINITE);
+  if (waitResult != WAIT_OBJECT_0)
+  {
+    fprintf(stderr, "WaitForSingleObject failed with result %lu and error %lu\n",
+        (unsigned long)waitResult, (unsigned long)GetLastError());
+    return false;
+  }
+
+  if (!CloseHandle(handle))
+  {
+    fprintf(stderr, "CloseHandle failed with error %lu\n",
+        (unsigned long)GetLastError());
+    return false;
+  }
+  thread->handle = 0U;
+#else
+  const int error = pthread_join(thread->handle, NULL);
+  if (error != 0)
+  {
+    fprintf(stderr, "pthread_join: %s\n", strerror(error));
+    return false;
+  }
+#endif
+
+  thread->function = NULL;
+  thread->opaque   = NULL;
+  thread->started  = false;
+  return true;
+}
+
 bool testMonotonicMS(uint64_t * result)
 {
-  struct timespec now;
+#if defined(_WIN32)
+  LARGE_INTEGER frequency = { 0 };
+  LARGE_INTEGER counter   = { 0 };
+  if (!QueryPerformanceFrequency(&frequency) ||
+      !QueryPerformanceCounter(&counter) ||
+      frequency.QuadPart <= 0 || counter.QuadPart < 0)
+  {
+    fprintf(stderr, "QueryPerformanceCounter failed\n");
+    return false;
+  }
+
+  const uint64_t seconds =
+    (uint64_t)(counter.QuadPart / frequency.QuadPart);
+  const uint64_t ticks   =
+    (uint64_t)(counter.QuadPart % frequency.QuadPart);
+  *result = seconds * UINT64_C(1000) +
+    ticks * UINT64_C(1000) / (uint64_t)frequency.QuadPart;
+#else
+  struct timespec now = { 0 };
   if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
   {
     perror("clock_gettime");
@@ -73,11 +218,15 @@ bool testMonotonicMS(uint64_t * result)
 
   *result = (uint64_t)now.tv_sec * UINT64_C(1000) +
     (uint64_t)now.tv_nsec / UINT64_C(1000000);
+#endif
   return true;
 }
 
 bool testSleepMS(unsigned int milliseconds)
 {
+#if defined(_WIN32)
+  Sleep((DWORD)milliseconds);
+#else
   struct timespec remaining =
   {
     .tv_sec  = milliseconds / 1000U,
@@ -92,16 +241,17 @@ bool testSleepMS(unsigned int milliseconds)
     perror("nanosleep");
     return false;
   }
+#endif
 
   return true;
 }
 
-static void * hostPump(void * opaque)
+static void hostPump(void * opaque)
 {
   struct TestFixture * fixture = opaque;
   fixture->pumpStatus = LGMP_OK;
 
-  while(!atomic_load_explicit(&fixture->pumpStop, memory_order_relaxed))
+  while(!testAtomicBoolLoad(&fixture->pumpStop))
   {
     fixture->pumpStatus = lgmpHostProcess(fixture->host);
     if (fixture->pumpStatus != LGMP_OK)
@@ -113,8 +263,6 @@ static void * hostPump(void * opaque)
       break;
     }
   }
-
-  return NULL;
 }
 
 static bool initHost(struct TestFixture * fixture)
@@ -127,7 +275,7 @@ static bool initHost(struct TestFixture * fixture)
 bool testFixtureInit(struct TestFixture * fixture)
 {
   memset(fixture, 0, sizeof(*fixture));
-  atomic_init(&fixture->pumpStop, false);
+  testAtomicBoolInit(&fixture->pumpStop, false);
 
   const size_t allocationSize = TEST_MEMORY_SIZE +
     TEST_MEMORY_ALIGNMENT - 1U;
@@ -159,38 +307,27 @@ bool testFixtureInit(struct TestFixture * fixture)
 
 bool testFixtureStart(struct TestFixture * fixture)
 {
-  if (fixture->pumpStarted)
+  if (fixture->pumpThread.started)
     return true;
 
-  atomic_store_explicit(&fixture->pumpStop, false, memory_order_relaxed);
+  testAtomicBoolStore(&fixture->pumpStop, false);
   fixture->pumpStatus = LGMP_OK;
 
-  const int error = pthread_create(&fixture->pumpThread, NULL, hostPump,
-      fixture);
-  if (error != 0)
-  {
-    fprintf(stderr, "pthread_create: %s\n", strerror(error));
+  if (!testThreadStart(&fixture->pumpThread, hostPump, fixture))
     return false;
-  }
 
-  fixture->pumpStarted = true;
   return true;
 }
 
 bool testFixtureStop(struct TestFixture * fixture)
 {
-  if (!fixture->pumpStarted)
+  if (!fixture->pumpThread.started)
     return true;
 
-  atomic_store_explicit(&fixture->pumpStop, true, memory_order_relaxed);
-  const int error = pthread_join(fixture->pumpThread, NULL);
-  if (error != 0)
-  {
-    fprintf(stderr, "pthread_join: %s\n", strerror(error));
+  testAtomicBoolStore(&fixture->pumpStop, true);
+  if (!testThreadJoin(&fixture->pumpThread))
     return false;
-  }
 
-  fixture->pumpStarted = false;
   return testExpectStatus("lgmpHostProcess", fixture->pumpStatus, LGMP_OK);
 }
 
@@ -209,7 +346,7 @@ bool testFixtureRestart(struct TestFixture * fixture)
 bool testFixtureDestroy(struct TestFixture * fixture)
 {
   const bool stopped = testFixtureStop(fixture);
-  if (fixture->pumpStarted)
+  if (fixture->pumpThread.started)
     return false;
 
   if (fixture->host)

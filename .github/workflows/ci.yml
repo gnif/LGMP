@@ -53,6 +53,44 @@ jobs:
           ctest --test-dir build --output-on-failure
           --no-tests=error --timeout 60
 
+  windows-msvc:
+    name: MSVC / ${{ matrix.build_type }}
+    runs-on: windows-2022
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type:
+          - Debug
+          - Release
+    steps:
+      - name: Check out LGMP
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Configure
+        run: >-
+          cmake -S lgmp -B build
+          -G "Visual Studio 17 2022"
+          -A x64
+          -DLGMP_BUILD_TESTS=ON
+
+      - name: Build
+        run: >-
+          cmake --build build
+          --config ${{ matrix.build_type }}
+          --parallel 2
+
+      - name: Test
+        run: >-
+          ctest --test-dir build
+          --build-config ${{ matrix.build_type }}
+          --output-on-failure
+          --no-tests=error
+          --timeout 60
+
   thread-sanitizer:
     name: Clang / ThreadSanitizer
     runs-on: ubuntu-24.04

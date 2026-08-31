@@ -28,7 +28,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define ALIGN(x) ((x + (3)) & ~(3))
+#define ALIGN(x) (((x) + 3U) & ~(size_t)3U)
 #define ALIGN_TO(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
 #define CACHELINE 64u
 
@@ -137,7 +137,7 @@ LGMP_STATUS lgmpHostInit(void *mem, const uint32_t size, PLGMPHost * result,
   const uint32_t sessionID =
     lgmpSharedObserve32(&host->header->sessionID);
   do
-    host->sessionID = rand();
+    host->sessionID = (uint32_t)rand();
   while(!host->sessionID || sessionID == host->sessionID);
 
   initHeader(host, timestamp);
@@ -388,7 +388,7 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
       }
 
       // if there are still valid pending subs break out
-      if (pend & ~LGMP_SUBS_BAD(subs))
+      if (pend & ~(uint32_t)LGMP_SUBS_BAD(subs))
         break;
 
       // message finished

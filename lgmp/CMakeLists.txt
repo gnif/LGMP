@@ -3,6 +3,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(lgmp LANGUAGES C)
 
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 include_directories(include)
 
 set(SOURCES
@@ -30,6 +33,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
     "$<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:DEBUG>>:-g3>"
     "$<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:DEBUG>>:-ggdb>"
   )
+elseif(MSVC)
+  foreach(option
+      /W4
+      /WX
+      /utf-8
+      /wd4324)
+    add_compile_options("$<$<COMPILE_LANGUAGE:C>:${option}>")
+  endforeach()
 endif()
 
 add_library(lgmp STATIC ${SOURCES})
@@ -43,7 +54,10 @@ target_include_directories(lgmp
 option(LGMP_BUILD_TESTS "Build LGMP tests" OFF)
 if(LGMP_BUILD_TESTS)
   enable_testing()
-  find_package(Threads REQUIRED)
+
+  if(NOT WIN32)
+    find_package(Threads REQUIRED)
+  endif()
 
   add_library(lgmp-test-support STATIC
     tests/test_support.c
@@ -55,8 +69,10 @@ if(LGMP_BUILD_TESTS)
   target_link_libraries(lgmp-test-support
     PUBLIC
       lgmp
-      Threads::Threads
   )
+  if(NOT WIN32)
+    target_link_libraries(lgmp-test-support PUBLIC Threads::Threads)
+  endif()
 
   function(lgmp_add_test_executable target source)
     add_executable(${target} ${source})

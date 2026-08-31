@@ -22,11 +22,14 @@
 #ifndef LGMP_TEST_SUPPORT_H
 #define LGMP_TEST_SUPPORT_H
 
-#include <pthread.h>
-#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#if !defined(_WIN32)
+#include <pthread.h>
+#include <stdatomic.h>
+#endif
 
 #include "lgmp/client.h"
 #include "lgmp/host.h"
@@ -35,15 +38,37 @@
 #define TEST_MEMORY_SIZE      (1024U * 1024U)
 #define TEST_MEMORY_ALIGNMENT 4096U
 
+typedef void (* TestThreadFunction)(void * opaque);
+
+struct TestThread
+{
+#if defined(_WIN32)
+  uintptr_t          handle;
+#else
+  pthread_t          handle;
+#endif
+  TestThreadFunction function;
+  void             * opaque;
+  bool               started;
+};
+
+struct TestAtomicBool
+{
+#if defined(_WIN32)
+  volatile long value;
+#else
+  atomic_bool   value;
+#endif
+};
+
 struct TestFixture
 {
-  void        * allocation;
-  uint8_t     * memory;
-  PLGMPHost     host;
-  pthread_t     pumpThread;
-  atomic_bool   pumpStop;
-  LGMP_STATUS   pumpStatus;
-  bool          pumpStarted;
+  void                  * allocation;
+  uint8_t               * memory;
+  PLGMPHost               host;
+  struct TestThread       pumpThread;
+  struct TestAtomicBool   pumpStop;
+  LGMP_STATUS             pumpStatus;
 };
 
 extern const uint8_t  testSessionUdata[];
@@ -54,6 +79,14 @@ bool testCheck(bool condition, const char * expression,
 bool testExpectStatus(const char * operation, LGMP_STATUS actual,
     LGMP_STATUS expected);
 size_t testHostAllocationSize(size_t requestedSize);
+
+void testAtomicBoolInit(struct TestAtomicBool * value, bool initial);
+bool testAtomicBoolLoad(struct TestAtomicBool * value);
+void testAtomicBoolStore(struct TestAtomicBool * value, bool next);
+
+bool testThreadStart(struct TestThread * thread,
+    TestThreadFunction function, void * opaque);
+bool testThreadJoin(struct TestThread * thread);
 
 #define TEST_CHECK(expression) \
   testCheck(!!(expression), #expression, __FILE__, __LINE__)
