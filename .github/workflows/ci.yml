@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.compiler.name }} / ${{ matrix.build_type }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - name: GCC
+            cc: gcc
+          - name: Clang
+            cc: clang
+        build_type:
+          - Debug
+          - Release
+    steps:
+      - name: Check out LGMP
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.compiler.cc }}
+        run: >-
+          cmake -S lgmp -B build
+          -DLGMP_BUILD_TESTS=ON
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+      - name: Build
+        run: cmake --build build --parallel 2
+
+      - name: Test
+        run: >-
+          ctest --test-dir build --output-on-failure
+          --no-tests=error --timeout 60
+
+  thread-sanitizer:
+    name: Clang / ThreadSanitizer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out LGMP
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Configure
+        env:
+          CC: clang
+        run: >-
+          cmake -S lgmp -B build
+          -DLGMP_BUILD_TESTS=ON
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_FLAGS="-fsanitize=thread -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+
+      - name: Build
+        run: cmake --build build --parallel 2
+
+      - name: Test
+        env:
+          TSAN_OPTIONS: halt_on_error=1
+        run: >-
+          ctest --test-dir build --output-on-failure
+          --no-tests=error --timeout 60
