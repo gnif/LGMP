@@ -71,12 +71,12 @@ void lgmpHostGetMemoryContext(PLGMPHost host, uint8_t ** mem, size_t * size,
   *sessionID = &host->header->sessionID;
 }
 
-static void initHeader(PLGMPHost host)
+static void initHeader(PLGMPHost host, uint64_t timestamp)
 {
   lgmpSharedPublish32(&host->header->magic, 0);
   lgmpSharedPublish32(&host->header->sessionID, 0);
 
-  host->header->timestamp = lgmpGetClockMS();
+  host->header->timestamp = timestamp;
   atomic_store_explicit(&host->header->nextClientID, 0,
       memory_order_relaxed);
   host->header->version   = LGMP_PROTOCOL_VERSION;
@@ -101,8 +101,8 @@ LGMP_STATUS lgmpHostInit(void *mem, const uint32_t size, PLGMPHost * result,
 
   *result = NULL;
 
-  // make sure that lgmpGetClockMS works
-  if (!lgmpGetClockMS())
+  uint64_t timestamp;
+  if (!lgmpClockReadMS(&timestamp))
     return LGMP_ERR_CLOCK_FAILURE;
 
   if (size < sizeof(struct LGMPHeader) + udataSize)
@@ -139,7 +139,7 @@ LGMP_STATUS lgmpHostInit(void *mem, const uint32_t size, PLGMPHost * result,
     host->sessionID = rand();
   while(!host->sessionID || sessionID == host->sessionID);
 
-  initHeader(host);
+  initHeader(host, timestamp);
   return LGMP_OK;
 }
 
@@ -314,7 +314,10 @@ LGMP_STATUS lgmpHostProcess(PLGMPHost host)
   if (unlikely(host->header->magic != LGMP_PROTOCOL_MAGIC))
     return LGMP_ERR_CORRUPTED;
 
-  const uint64_t now = lgmpGetClockMS();
+  uint64_t now;
+  if (!lgmpClockReadMS(&now))
+    return LGMP_ERR_CLOCK_FAILURE;
+
   if (unlikely(now - host->lastTimestamp >= 250))
   {
     atomic_store_explicit(&host->header->timestamp, now, memory_order_release);
@@ -532,11 +535,19 @@ static LGMP_STATUS queuePost(PLGMPHostQueue queue, uint64_t udata,
   }
 
   // full when count == numMessages
-  if (unlikely(atomic_load_explicit(&hq->count,
-        memory_order_relaxed) == hq->numMessages))
+  const uint32_t count = atomic_load_explicit(&hq->count,
+      memory_order_relaxed);
+  if (unlikely(count == hq->numMessages))
   {
     LGMP_QUEUE_UNLOCK(hq);
     return LGMP_ERR_QUEUE_FULL;
+  }
+
+  uint64_t now = 0;
+  if (count == 0 && !lgmpClockReadMS(&now))
+  {
+    LGMP_QUEUE_UNLOCK(hq);
+    return LGMP_ERR_CLOCK_FAILURE;
   }
 
   struct LGMPHeaderMessage *messages = (struct LGMPHeaderMessage *)
@@ -555,8 +566,9 @@ static LGMP_STATUS queuePost(PLGMPHostQueue queue, uint64_t udata,
   atomic_store_explicit(&msg->pendingSubs, pend, memory_order_release);
 
   // increment the queue count, if it were zero update the msgTimeout
-  if (atomic_fetch_add_explicit(&hq->count, 1, memory_order_release) == 0)
-    atomic_store_explicit(&hq->msgTimeout, lgmpGetClockMS() + hq->maxTime,
+  atomic_fetch_add_explicit(&hq->count, 1, memory_order_release);
+  if (count == 0)
+    atomic_store_explicit(&hq->msgTimeout, now + hq->maxTime,
         memory_order_relaxed);
 
   queue->position = (queue->position + 1) & mask;

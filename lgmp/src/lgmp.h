@@ -23,9 +23,9 @@
 
 #include "lgmp/lgmp.h"
 #include "lgmp/status.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -51,29 +51,33 @@ void lgmpHostGetMemoryContext(PLGMPHost host, uint8_t ** mem, size_t * size,
 LGMP_STATUS lgmpClientGetMemoryContext(PLGMPClient client, uint8_t ** mem,
     size_t * size, uint32_t ** sessionID, uint32_t * clientID);
 
-// returns a milliseond resolution monotonic counter
-inline static uint64_t lgmpGetClockMS(void)
+// reads a millisecond-resolution monotonic counter
+static inline bool lgmpClockReadMS(uint64_t * result)
 {
 #if defined(_WIN32)
-  static LARGE_INTEGER freq  = { 0 };
-  static LARGE_INTEGER start = { 0 };
-  if (!freq.QuadPart)
-  {
-    QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&start);
-    if (freq.QuadPart == 0)
-      abort();
-  }
+  LARGE_INTEGER frequency;
+  LARGE_INTEGER counter;
+  if (!QueryPerformanceFrequency(&frequency) ||
+      !QueryPerformanceCounter(&counter) ||
+      frequency.QuadPart <= 0 || counter.QuadPart < 0)
+    return false;
 
-  LARGE_INTEGER time;
-  QueryPerformanceCounter(&time);
-  return (((time.QuadPart - start.QuadPart) * 1000ULL) / freq.QuadPart) + 1;
+  const uint64_t seconds =
+    (uint64_t)(counter.QuadPart / frequency.QuadPart);
+  const uint64_t ticks   =
+    (uint64_t)(counter.QuadPart % frequency.QuadPart);
+  *result = seconds * 1000ULL +
+    ticks * 1000ULL / (uint64_t)frequency.QuadPart;
 #else
-  struct timespec tsnow;
-  if (clock_gettime(CLOCK_MONOTONIC, &tsnow) != 0)
-    return 0;
-  return (uint64_t)tsnow.tv_sec * 1000ULL + (uint64_t)tsnow.tv_nsec / 1000000ULL;
+  struct timespec now;
+  if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+    return false;
+
+  *result = (uint64_t)now.tv_sec * 1000ULL +
+    (uint64_t)now.tv_nsec / 1000000ULL;
 #endif
+
+  return true;
 }
 
 inline static void lgmpSleepMs(unsigned ms)

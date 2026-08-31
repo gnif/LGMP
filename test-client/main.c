@@ -26,14 +26,12 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <string.h>
-#include <time.h>
 
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include "../kvmfr.h"
 
 #include "lgmp/client.h"
-#include "../../lgmp/src/lgmp.h"
 
 void * ram;
 
@@ -60,8 +58,6 @@ int main(int argc, char * argv[])
         break;
     }
   }
-
-  srand(lgmpGetClockMS());
 
   if (!shmFile || error)
   {

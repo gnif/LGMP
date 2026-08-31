@@ -237,8 +237,8 @@ LGMP_STATUS lgmpClientInit(void * mem, const size_t size, PLGMPClient * result)
   if (size < sizeof(struct LGMPHeader))
     return LGMP_ERR_INVALID_SIZE;
 
-  // make sure that lgmpGetClockMS works
-  if (!lgmpGetClockMS())
+  uint64_t now;
+  if (!lgmpClockReadMS(&now))
     return LGMP_ERR_CLOCK_FAILURE;
 
   struct LGMPHeader *header = (struct LGMPHeader*)mem;
@@ -324,8 +324,12 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
   const uint64_t initialHosttime = client->hosttime;
   LGMP_UNLOCK(client->heartbeatLock);
 
+  uint64_t now;
+  if (!lgmpClockReadMS(&now))
+    return LGMP_ERR_CLOCK_FAILURE;
+
   // check the host's timestamp is updating
-  const uint64_t end = lgmpGetClockMS() + 500;
+  const uint64_t end = now + 500;
   bool valid = false;
   do
   {
@@ -336,8 +340,11 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
     }
     timestamp = atomic_load_explicit(&header->timestamp, memory_order_relaxed);
     lgmpSleepMs(1);
+
+    if (!lgmpClockReadMS(&now))
+      return LGMP_ERR_CLOCK_FAILURE;
   }
-  while(lgmpGetClockMS() < end);
+  while(now < end);
 
   if (!valid)
     return LGMP_ERR_INVALID_SESSION;
@@ -363,6 +370,10 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
     return clientSessionMatches(client, sessionID) ?
       LGMP_ERR_CORRUPTED : LGMP_ERR_INVALID_SESSION;
 
+  uint64_t lastHeartbeat;
+  if (!lgmpClockReadMS(&lastHeartbeat))
+    return LGMP_ERR_CLOCK_FAILURE;
+
   do
   {
     client->id = atomic_fetch_add_explicit(&header->nextClientID, 1,
@@ -377,7 +388,7 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
   memcpy(client->queues, queues, sizeof(client->queues));
   client->sessionID          = sessionID;
   client->hosttime           = timestamp;
-  client->lastHeartbeat      = lgmpGetClockMS();
+  client->lastHeartbeat      = lastHeartbeat;
   client->firstMessageOffset = firstMessageOffset;
   client->numQueues          = numQueues;
   LGMP_UNLOCK(client->heartbeatLock);
@@ -407,7 +418,13 @@ bool lgmpClientSessionValid(PLGMPClient client)
   // check if the heartbeat changed
   const uint64_t hosttime = atomic_load_explicit(&client->header->timestamp,
       memory_order_relaxed);
-  const uint64_t now = lgmpGetClockMS();
+  uint64_t now;
+  if (!lgmpClockReadMS(&now))
+  {
+    LGMP_UNLOCK(client->heartbeatLock);
+    return false;
+  }
+
   if (likely(client->hosttime != hosttime))
   {
     client->lastHeartbeat = now;
