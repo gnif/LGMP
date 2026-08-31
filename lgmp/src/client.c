@@ -319,7 +319,6 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
 
   uint64_t timestamp = atomic_load_explicit(&header->timestamp,
       memory_order_relaxed);
-#ifndef LGMP_REALACY
   LGMP_LOCK(client->heartbeatLock);
   const uint64_t initialHosttime = client->hosttime;
   LGMP_UNLOCK(client->heartbeatLock);
@@ -348,7 +347,6 @@ LGMP_STATUS lgmpClientSessionInit(PLGMPClient client, uint32_t * udataSize,
 
   if (!valid)
     return LGMP_ERR_INVALID_SESSION;
-#endif
 
   if (unlikely(!clientSessionMatches(client, sessionID)))
     return LGMP_ERR_INVALID_SESSION;
@@ -413,8 +411,6 @@ bool lgmpClientSessionValid(PLGMPClient client)
     return false;
   }
 
-#ifndef LGMP_REALACY
-
   // check if the heartbeat changed
   const uint64_t hosttime = atomic_load_explicit(&client->header->timestamp,
       memory_order_relaxed);
@@ -439,8 +435,6 @@ bool lgmpClientSessionValid(PLGMPClient client)
     LGMP_UNLOCK(client->heartbeatLock);
     return false;
   }
-
-#endif
 
   LGMP_UNLOCK(client->heartbeatLock);
   return true;
