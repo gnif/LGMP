@@ -1,7 +1,8 @@
 /**
  * LGMP - Looking Glass Memory Protocol
- * Copyright © 2020-2025 Geoffrey McRae <geoff@hostfission.com>
+ * Copyright © 2020-2026 Geoffrey McRae <geoff@hostfission.com>
  * https://github.com/gnif/LGMP
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
