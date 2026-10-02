@@ -16,7 +16,15 @@ set(SOURCES
   src/stream.c
 )
 
-if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
+if(MSVC)
+  foreach(option
+      /W4
+      /WX
+      /utf-8
+      /wd4324)
+    add_compile_options("$<$<COMPILE_LANGUAGE:C>:${option}>")
+  endforeach()
+elseif(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
   foreach(option
       -Wall
       -Werror
@@ -33,14 +41,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
     "$<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:DEBUG>>:-g3>"
     "$<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:DEBUG>>:-ggdb>"
   )
-elseif(MSVC)
-  foreach(option
-      /W4
-      /WX
-      /utf-8
-      /wd4324)
-    add_compile_options("$<$<COMPILE_LANGUAGE:C>:${option}>")
-  endforeach()
 endif()
 
 add_library(lgmp STATIC ${SOURCES})
