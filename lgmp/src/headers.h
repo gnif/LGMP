@@ -266,7 +266,8 @@ struct ALIGNED_64 LGMPHeaderQueue
   struct LGMPClientMessage cMsgs[LGMP_MSGS_MAX];
 };
 
-#if defined(__cplusplus)
+#if defined(__cplusplus) || \
+    (defined(_MSC_VER) && !defined(__clang__))
 #  define LGMP_STATIC_ASSERT static_assert
 #else
 #  define LGMP_STATIC_ASSERT _Static_assert
